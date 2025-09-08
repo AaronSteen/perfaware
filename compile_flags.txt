@@ -1,0 +1,5 @@
+--driver-mode=cl
+/Zi
+/Od
+/MDd
+/nologo
