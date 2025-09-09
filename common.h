@@ -148,6 +148,14 @@ enum
     NOTUSED = 99
 } opcodes;
 
+enum
+{
+    MEM_MODE_NO_DISP = 0x00,
+    MEM_MODE_DISP_8 = 0x01,
+    MEM_MODE_DISP_16 = 0x02,
+    REG_MODE = 0x03
+} Mods;
+
 u8 ByteOneToOpcodeEnumLUT[] =
 {
     [0x00] = ADD,       [0x01] = ADD,       [0x02] = ADD,       [0x03] = ADD,

@@ -173,11 +173,80 @@ Win32_LoadIStream(HANDLE FileHandle)
 }
 
 void
+SafeCopy(void)
+{
+    //stub
+}
+
+void
 Group1Decode(struct decoded_inst *DecodedInst)
 {
+    struct parsed_inst ParsedInst = {0};
+    char *RegField = NULLPTR;
+    char *RorMField = NULLPTR;
+    u8 ByteOne = DecodedInst->Binary[0];
+    u8 ByteTwo = DecodedInst->Binary[1];
+
+    ParsedInst.Binary = DecodedInst->Binary;
+    ParsedInst.DestFlag = (bool)((ByteOne & 0x02) >> 1);
+    ParsedInst.IsWord = (bool)(ByteOne & 0x01);
+    ParsedInst.Mod = ((ByteTwo & MOD_FIELD) >> 6);
+    ParsedInst.Reg = ((ByteTwo & FLEX_FIELD) >> 3);
+    ParsedInst.RorM = (ByteTwo & R_OR_M_FIELD);
+
+    DecodedInst->Size = 2;
+
+    if(ParsedInst.IsWord)
+    {
+        RegField = WordRegLUT[ByteTwo];
+    }
+    else
+    {
+        RegField = ByteRegLUT[ByteTwo];
+    }
+
+    if(ParsedInst.Mod == REG_MODE)
+    {
+        if(ParsedInst.IsWord)
+        {
+            RorMField = WordRegLUT[ByteTwo];
+        }
+        else
+        {
+            RorMField = ByteRegLUT[ByteTwo];
+        }
+    }
+    else
+    {
+        // TODO: Check for direct address.
+
+        RorMField = ReadRorMField(ParsedInst.RorM);
+
+        if(ParsedInst.Mod == MEM_MODE_DISP_8)
+        {
+            DecodedInst.Size += 1;
+            Read8BitDisp();
+        }
+        else if(ParsedInst.Mod == MEM_MODE_DISP_16)
+        {
+            DecodedInst.Size += 2;
+            Read16BitDisp();
+        }
+        
+        CloseBracket(RorMField);
+    }
+
+    if(ParsedInst.DestFlag)
+    {
+
+        
+        DecodedInst->OperandOne
+    }
 
 
 }
+
+
 
 u8
 ReadExtendedOpcode(struct decoded_inst *DecodedInst)
