@@ -34,12 +34,17 @@ struct istream
     int Idx;
 };
 
-struct string
+struct decoded_inst
 {
-    SIZE_T Len;
-    char Start[MAX_STRING_LEN];
-    char *Ptr;
-    char *DoNotCrossThisLine;
+    u8 *Binary;
+    char *ReadableBinary;
+    int Size;
+    u8 OpcodeEnum;
+    char *Mnemonic;
+    char *Reg;
+    char *RorM;
+    char OperandOne[MAX_STRING_LEN];
+    char OperandTwo[MAX_STRING_LEN];
 };
 
 enum
