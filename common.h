@@ -10,7 +10,9 @@ typedef uint16_t u16;
 typedef int8_t s8;
 typedef int16_t s16;
 
+#define NULLPTR (void *)0
 #define MAX_STRING_LEN 255
+#define DIRECT_ADDRESS 0x06
 #define Debug_OutputErrorMessage(Msg) __Debug_OutputErrorMessage(Msg, __func__, __LINE__)
 
 struct parsed_inst
@@ -34,15 +36,23 @@ struct istream
     int Idx;
 };
 
+enum group
+{
+    GROUP_1 = 1,
+    GROUP_2 = 2, 
+    GROUP_3 = 3, 
+    GROUP_4 = 4, 
+    GROUP_5 = 5, 
+    GROUP_6 = 6
+};
+
 struct decoded_inst
 {
     u8 *Binary;
-    char *ReadableBinary;
     int Size;
     u8 OpcodeEnum;
     char *Mnemonic;
-    char *Reg;
-    char *RorM;
+    enum group Group;
     char OperandOne[MAX_STRING_LEN];
     char OperandTwo[MAX_STRING_LEN];
 };
@@ -153,8 +163,17 @@ enum
     MEM_MODE_NO_DISP = 0x00,
     MEM_MODE_DISP_8 = 0x01,
     MEM_MODE_DISP_16 = 0x02,
-    REG_MODE = 0x03
+    REG_MODE = 0x03,
+
 } Mods;
+
+enum
+{
+    MOD_FIELD = 0xC0,
+    FLEX_FIELD = 0x38,
+    R_OR_M_FIELD = 0x07
+} Fields;
+
 
 u8 ByteOneToOpcodeEnumLUT[] =
 {
@@ -305,4 +324,9 @@ char *OpcodeEnumToStringLUT[255] = {
 
     [OUT_] = "out",
 };
+
+
+
+
+
 

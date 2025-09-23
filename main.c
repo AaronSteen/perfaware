@@ -27,6 +27,7 @@ main(int argc, char **argv)
         }
         DecodedInst.Mnemonic = OpcodeEnumToStringLUT[DecodedInst.OpcodeEnum];
 
+        if(IStream.Idx == 6) __debugbreak();
         Dispatch(&DecodedInst);
 
         Debug_PrintCurrentStatus(&DecodedInst);
