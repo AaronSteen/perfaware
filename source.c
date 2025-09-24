@@ -386,6 +386,58 @@ ReadImmField(struct parsed_inst *ParsedInst, u8 *ImmBits, char *ImmBuffer, bool 
     }
 }
 
+// G5_OPREG_NODATA,        // [.... .reg] (no trailing immediate value)
+// ; ------------------------------------------------------------------------
+// ; Group 5 — reg encoded in opcode, no trailing data
+// ; (INC/DEC r16, PUSH/POP r16, XCHG AX,r16, PUSH/POP Sreg)
+// ; ------------------------------------------------------------------------
+//
+// push cx
+// ; hex: 51
+// ; bin: [0101 0001]
+//
+// xchg ax, dx
+// ; hex: 92
+// ; bin: [1001 0010]
+//
+// xchg ax, si
+// ; hex: 96
+// ; bin: [1001 0110]
+void
+Group5Decode(struct decoded_inst *DecodedInst)
+{
+    struct parsed_inst ParsedInst = {0};
+    char *RegPtr = NULLPTR;
+    u8 ByteOne = DecodedInst->Binary[0];
+    u8 ByteTwo = DecodedInst->Binary[1];
+
+    ParsedInst.Binary = DecodedInst->Binary;
+    DecodedInst->Size = 1;
+    u8 Top3Bits = (ByteOne & 0xE0);
+
+    if( ((DecodedInst->OpcodeEnum == PUSH) || (DecodedInst->OpcodeEnum == POP)) && 
+            (Top3Bits == 0) )
+    {
+        ParsedInst.Reg = ((ByteOne & 0x18) >> 3);
+        RegPtr = SegRegLUT[ParsedInst.Reg];
+    }
+    else 
+    {
+        ParsedInst.Reg = (ByteOne & 0x07);
+        RegPtr = WordRegLUT[ParsedInst.Reg];
+    }
+
+    if(DecodedInst->OpcodeEnum == XCHG)
+    {
+        strncpy(DecodedInst->OperandOne, "ax", 2);
+        strncpy(DecodedInst->OperandTwo, RegPtr, 2);
+    }
+    else
+    {
+        strncpy(DecodedInst->OperandOne, RegPtr, 2);
+    }
+}
+
 
 // G4_ACC_IMM
 // [.... ...w] [data] [data]
