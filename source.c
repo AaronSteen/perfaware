@@ -285,16 +285,18 @@ ReadRorMField(struct parsed_inst *ParsedInst, char *RorMBuffer)
             char DispBuffer[MAX_STRING_LEN] = {0};
 
             bool IsNegative = (DispBits < 0);
+            bool IsSigned = true;
+
             if(IsNegative)
             {
                 strncat(RorMBuffer, " - ", 3);
-                GetIntAsString_8(DispBits, DispBuffer, true);
+                GetIntAsString_8(DispBits, DispBuffer, IsSigned);
                 strncat( RorMBuffer, ((char *)(DispBuffer + 1)), (MAX_STRING_LEN - strlen(RorMBuffer)) );
             }
             else
             {
                 strncat(RorMBuffer, " + ", 3);
-                GetIntAsString_8(DispBits, DispBuffer, true);
+                GetIntAsString_8(DispBits, DispBuffer, IsSigned);
                 strncat( RorMBuffer, DispBuffer, (MAX_STRING_LEN - strlen(RorMBuffer)) );
             }
         }
@@ -306,18 +308,19 @@ ReadRorMField(struct parsed_inst *ParsedInst, char *RorMBuffer)
         if(DispBits != 0)
         {
             char DispBuffer[MAX_STRING_LEN] = {0};
-
             bool IsNegative = (DispBits < 0);
+            bool IsSigned = true;
+
             if(IsNegative)
             {
                 strncat(RorMBuffer, " - ", 3);
-                GetIntAsString_16(DispBits, DispBuffer, true);
+                GetIntAsString_16(DispBits, DispBuffer, IsSigned);
                 strncat( RorMBuffer, ((char *)(DispBuffer + 1)), (MAX_STRING_LEN - strlen(RorMBuffer)) );
             }
             else
             {
                 strncat(RorMBuffer, " + ", 3);
-                GetIntAsString_16(DispBits, DispBuffer, true);
+                GetIntAsString_16(DispBits, DispBuffer, IsSigned);
                 strncat( RorMBuffer, DispBuffer, (MAX_STRING_LEN - strlen(RorMBuffer)) );
             }
         }
@@ -333,7 +336,7 @@ ReadRorMField(struct parsed_inst *ParsedInst, char *RorMBuffer)
 }
 
 bool
-CheckArithmetic(u8 OpcodeEnum)
+CheckIfArithmetic(u8 OpcodeEnum)
 {
     if(
             (OpcodeEnum == ADD) ||
@@ -352,12 +355,12 @@ CheckArithmetic(u8 OpcodeEnum)
 
 
 void
-ReadImmField(struct parsed_inst *ParsedInst, u8 *ImmBits, char *ImmBuffer, bool IsArithmetic)
+ReadImmField(struct parsed_inst *ParsedInst, u8 *ImmBits, char *ImmBuffer, bool CareAboutSignExtend, bool IsSigned)
 {
     if(ParsedInst->IsWord)
     {
         u16 ImmValue = 0;
-        if(IsArithmetic)
+        if(CareAboutSignExtend)
         {
             bool IsSignExtended = (bool)(ParsedInst->Binary[0] & 0x02);
             if(IsSignExtended)
@@ -374,14 +377,56 @@ ReadImmField(struct parsed_inst *ParsedInst, u8 *ImmBits, char *ImmBuffer, bool 
         {
             ImmValue = *(u16 *)ImmBits;
         }
-        GetIntAsString_16(ImmValue, ImmBuffer, false);
+        GetIntAsString_16(ImmValue, ImmBuffer, IsSigned);
     }
     else
     {
         u8 ImmValue = *(u8 *)ImmBits;
-        GetIntAsString_8(ImmValue, ImmBuffer, false);
+        GetIntAsString_8(ImmValue, ImmBuffer, IsSigned);
     }
 }
+
+
+// G4_ACC_IMM
+// [.... ...w] [data] [data]
+void
+Group4Decode(struct decoded_inst *DecodedInst)
+{
+// add ax, 1000
+// ; hex: 05 E8 03
+// ; bin: [0000 0101] [1110 1000] [0000 0011]
+
+    struct parsed_inst ParsedInst = {0};
+    char ImmValue[MAX_STRING_LEN] = {0};
+    u8 ByteOne = DecodedInst->Binary[0];
+    u8 ByteTwo = DecodedInst->Binary[1];
+
+    ParsedInst.Binary = DecodedInst->Binary;
+    ParsedInst.IsWord = (bool)(ByteOne & 0x01);
+
+    DecodedInst->Size = 2;
+    u8 *ImmBits = (DecodedInst->Binary + 1);
+    char *Reg = NULLPTR;
+    bool IsSigned = true;
+    bool CareAboutSignExtend = false;
+
+    if(ParsedInst.IsWord)
+    {
+        DecodedInst->Size += 1;
+        Reg = "ax";
+        ReadImmField(&ParsedInst, ImmBits, ImmValue, CareAboutSignExtend, IsSigned);
+    }
+    else
+    {
+        Reg = "al";
+        ReadImmField(&ParsedInst, ImmBits, ImmValue, CareAboutSignExtend, IsSigned);
+    }
+
+    strncpy(DecodedInst->OperandOne, Reg, 2);
+    strncpy(DecodedInst->OperandTwo, ImmValue, strlen(ImmValue));
+}
+
+
 
 // [.... ...w] [mod <type> r/m] [disp-lo] [disp-hi]
 void
@@ -394,13 +439,6 @@ Group3Decode(struct decoded_inst *DecodedInst)
 // inc byte [bp + 1002]
 // ; hex: FE 86 EA 03
 // ; bin: [1111 1110] [1000 0110] [1110 1010] [0000 0011]
-
-    // need:
-    //      IsWord
-    //      Mod
-    //      RorM
-    //          if Mod == 11 then just get the reg
-    //          else call read RorM
 
     struct parsed_inst ParsedInst = {0};
     char RorMField[MAX_STRING_LEN] = {0};
@@ -470,20 +508,21 @@ Group2Decode(struct decoded_inst *DecodedInst)
         }
     }
 
-    u8 *ImmBytes = (ParsedInst.Binary + 2);
+    u8 *ImmBits = (ParsedInst.Binary + 2);
     if(ParsedInst.Mod == MEM_MODE_DISP_8)
     {
         DecodedInst->Size += 1;
-        ImmBytes += 1;
+        ImmBits += 1;
     }
     else if(ParsedInst.Mod == MEM_MODE_DISP_16)
     {
         DecodedInst->Size += 2;
-        ImmBytes += 2;
+        ImmBits += 2;
     }
 
-    bool IsArithmetic = CheckArithmetic(DecodedInst->OpcodeEnum);
-    ReadImmField(&ParsedInst, ImmBytes, ImmField, IsArithmetic);
+    bool CareAboutSignExtend = CheckIfArithmetic(DecodedInst->OpcodeEnum);
+    bool IsSigned = true;
+    ReadImmField(&ParsedInst, ImmBits, ImmField, CareAboutSignExtend, IsSigned);
 
     strncpy( DecodedInst->OperandOne, RorMField, (MAX_STRING_LEN - strlen(RorMField)) );
     strncpy( DecodedInst->OperandTwo, ImmField, (MAX_STRING_LEN - strlen(ImmField)) );

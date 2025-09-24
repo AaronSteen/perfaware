@@ -46,12 +46,12 @@ main(int argc, char **argv)
                 Group3Decode(&DecodedInst);
             } break;
 
-#if 0
             case 4:
             {
                 Group4Decode(&DecodedInst);
             } break;
 
+#if 0
             case 5:
             {
                 Group5Decode(&DecodedInst);
