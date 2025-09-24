@@ -27,10 +27,67 @@ main(int argc, char **argv)
         }
         DecodedInst.Mnemonic = OpcodeEnumToStringLUT[DecodedInst.OpcodeEnum];
 
-        if(IStream.Idx == 6) __debugbreak();
-        Dispatch(&DecodedInst);
+        DecodedInst.DecodeGroup = ByteOneToDecodeGroupLUT[DecodedInst.Binary[0]];
+        
+        switch(DecodedInst.DecodeGroup)
+        {
+            case 1:
+            {
+                Group1Decode(&DecodedInst);
+            } break;
 
-        Debug_PrintCurrentStatus(&DecodedInst);
+            case 2:
+            {
+                Group2Decode(&DecodedInst);
+            } break;
+
+            case 3:
+            {
+                Group3Decode(&DecodedInst);
+            } break;
+
+#if 0
+            case 4:
+            {
+                Group4Decode(&DecodedInst);
+            } break;
+
+            case 5:
+            {
+                Group5Decode(&DecodedInst);
+            } break;
+
+            case 6:
+            {
+                Group6Decode(&DecodedInst);
+            } break;
+
+            case 7:
+            {
+                Group7Decode(&DecodedInst);
+            } break;
+
+            case 8:
+            {
+                Group8Decode(&DecodedInst);
+            } break;
+
+            case 9:
+            {
+                Group9Decode(&DecodedInst);
+            } break;
+#endif            
+            default:
+            {
+                // Error
+                Debug_OutputErrorMessage("Failed to dispatch in switch statement in main");
+                exit(1);
+            }
+
+
+        }
+
+        Debug_PrintCurrentStatus(&DecodedInst, IStream.Idx);
 
         IP += DecodedInst.Size;
         ++IStream.Idx;

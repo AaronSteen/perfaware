@@ -36,23 +36,13 @@ struct istream
     int Idx;
 };
 
-enum group
-{
-    GROUP_1 = 1,
-    GROUP_2 = 2, 
-    GROUP_3 = 3, 
-    GROUP_4 = 4, 
-    GROUP_5 = 5, 
-    GROUP_6 = 6
-};
-
 struct decoded_inst
 {
     u8 *Binary;
     int Size;
     u8 OpcodeEnum;
+    u8 DecodeGroup;
     char *Mnemonic;
-    enum group Group;
     char OperandOne[MAX_STRING_LEN];
     char OperandTwo[MAX_STRING_LEN];
 };
@@ -174,6 +164,69 @@ enum
     R_OR_M_FIELD = 0x07
 } Fields;
 
+enum 
+{
+    G1_RM_REG = 1,   // [.... ..dw] [mod reg r/m] [disp-lo] [disp-hi]
+    G2_IMM_RM,       // [.... ..sw] or [.... ..dw] [mod <type> r/m] [disp-lo] [disp-hi] [data] [data]
+    G3_UNARY_RM,     // [.... ...w] [mod <type> r/m] [disp-lo] [disp-hi]
+    G4_ACC_IMM,      // [.... ...w] [data] [data]
+    G5_OPREG_NODATA,        // [.... .reg] (no trailing immediate value)
+    G6_OPREG_IMM,    // [.... .reg] [data] [data] (up to two bytes for trailing imm value)
+    G7_ONEBYTE,      // one byte with no operands
+    G8_SHIFT,        // shifts/rotates D0–D3
+    G9_CTRL_IO       // control-transfer + I/O (Jcc, loop/jcxz, call/jmp/ret/int, IN/OUT)
+} DecodeGroup;
+
+u8 ByteOneToDecodeGroupLUT[256] =
+{
+    /*00*/ G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G4_ACC_IMM,  G4_ACC_IMM,  G5_OPREG_NODATA, G5_OPREG_NODATA,
+    /*08*/ G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G4_ACC_IMM,  G4_ACC_IMM,  G5_OPREG_NODATA, G7_ONEBYTE,      
+
+    /*10*/ G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G4_ACC_IMM,  G4_ACC_IMM,  G5_OPREG_NODATA, G5_OPREG_NODATA,
+    /*18*/ G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G4_ACC_IMM,  G4_ACC_IMM,  G5_OPREG_NODATA, G5_OPREG_NODATA,
+
+    /*20*/ G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G4_ACC_IMM,  G4_ACC_IMM,  G7_ONEBYTE,      G7_ONEBYTE,       
+    /*28*/ G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G4_ACC_IMM,  G4_ACC_IMM,  G7_ONEBYTE,      G7_ONEBYTE,       
+
+    /*30*/ G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G4_ACC_IMM,  G4_ACC_IMM,  G7_ONEBYTE,      G7_ONEBYTE,       
+    /*38*/ G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G4_ACC_IMM,  G4_ACC_IMM,  G7_ONEBYTE,      G7_ONEBYTE,       
+
+    /*40*/ G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA,
+    /*48*/ G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA,
+
+    /*50*/ G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA,
+    /*58*/ G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA,
+
+    /*60*/ G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,
+    /*68*/ G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,
+
+    /*70*/ G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,
+    /*78*/ G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,
+
+    /*80*/ G2_IMM_RM,   G2_IMM_RM,   G2_IMM_RM,   G2_IMM_RM,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG, 
+    /*88*/ G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G3_UNARY_RM,
+
+    /*90*/ G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA,
+    /*98*/ G7_ONEBYTE,  G7_ONEBYTE,  G9_CTRL_IO,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE, 
+
+    /*A0*/ G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,   
+    /*A8*/ G4_ACC_IMM,  G4_ACC_IMM,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  
+
+    /*B0*/ G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM,
+    /*B8*/ G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM,
+
+    /*C0*/ G7_ONEBYTE,  G7_ONEBYTE,  G9_CTRL_IO,  G9_CTRL_IO,  G1_RM_REG,   G1_RM_REG,   G2_IMM_RM,   G2_IMM_RM,     
+    /*C8*/ G7_ONEBYTE,  G7_ONEBYTE,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G8_SHIFT,    G8_SHIFT,       
+
+    /*D0*/ G8_SHIFT,    G8_SHIFT,    G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G1_RM_REG,   G1_RM_REG,       
+    /*D8*/ G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,        
+
+    /*E0*/ G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,        
+    /*E8*/ G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,         
+
+    /*F0*/ G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G3_UNARY_RM, G3_UNARY_RM,         
+    /*F8*/ G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G3_UNARY_RM, G3_UNARY_RM          
+};
 
 u8 ByteOneToOpcodeEnumLUT[] =
 {

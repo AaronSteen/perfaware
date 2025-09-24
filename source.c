@@ -48,12 +48,15 @@ Debug_PrintBinary(u8 Value)
 }
 
 void
-Debug_PrintCurrentStatus(struct decoded_inst *DecodedInst)
+Debug_PrintCurrentStatus(struct decoded_inst *DecodedInst, int IStreamIdx)
 {
     // Print the instruction we just decoded
     char DecodedInstBuf[MAX_STRING_LEN] = {0};
-    sprintf_s(DecodedInstBuf, sizeof(DecodedInstBuf), "\n  *** %s %s, %s ***  \n\n", 
-                DecodedInst->Mnemonic, DecodedInst->OperandOne, DecodedInst->OperandTwo);
+    sprintf_s(DecodedInstBuf, sizeof(DecodedInstBuf), "\n         Idx %d         \n", IStreamIdx);
+    OutputDebugStringA(DecodedInstBuf);
+    sprintf_s(DecodedInstBuf, sizeof(DecodedInstBuf), "\n  *** %s %s%s %s ***  \n\n", 
+                DecodedInst->Mnemonic, DecodedInst->OperandOne, 
+                ( (DecodedInst->OperandTwo[0] != '\0') ? "," : "" ), DecodedInst->OperandTwo);
     OutputDebugStringA(DecodedInstBuf);
 
     // Print the bytes we just decoded, and a preview of the next few bytes of the instruction stream
@@ -208,20 +211,36 @@ LookUpEffectiveAddress(struct parsed_inst *ParsedInst, char *StrBuffer)
 }
 
 void
-GetIntAsString_8(u8 IntBits, char *StrBuffer)
+GetIntAsString_8(u8 UnsignedIntBits, char *StrBuffer, bool Signed)
 {
     char Temp[MAX_STRING_LEN] = {0};
-    sprintf_s(Temp, MAX_STRING_LEN, "%d", IntBits);
+    if(Signed)
+    {
+        s8 SignedIntBits = (s8)UnsignedIntBits;
+        sprintf_s(Temp, MAX_STRING_LEN, "%d", SignedIntBits);
+    }
+    else
+    {
+        sprintf_s(Temp, MAX_STRING_LEN, "%d", UnsignedIntBits);
+    }
     size_t DoNotOverflow = (MAX_STRING_LEN - strlen(StrBuffer));
     strncat(StrBuffer, Temp, DoNotOverflow);
 }
 
 
 void
-GetIntAsString_16(u16 IntBits, char *StrBuffer)
+GetIntAsString_16(u16 UnsignedIntBits, char *StrBuffer, bool Signed)
 {
     char Temp[MAX_STRING_LEN] = {0};
-    sprintf_s(Temp, MAX_STRING_LEN, "%d", IntBits);
+    if(Signed)
+    {
+        s16 SignedIntBits = (s16)UnsignedIntBits;
+        sprintf_s(Temp, MAX_STRING_LEN, "%d", SignedIntBits);
+    }
+    else
+    {
+        sprintf_s(Temp, MAX_STRING_LEN, "%d", UnsignedIntBits);
+    }
     size_t DoNotOverflow = (MAX_STRING_LEN - strlen(StrBuffer));
     strncat(StrBuffer, Temp, DoNotOverflow);
 }
@@ -250,7 +269,7 @@ ReadRorMField(struct parsed_inst *ParsedInst, char *RorMBuffer)
         {
             u16 DispBits = *(u16 *)(ParsedInst->Binary + 2);
             strncat(RorMBuffer, "[", MAX_STRING_LEN);
-            GetIntAsString_16(DispBits, RorMBuffer);
+            GetIntAsString_16(DispBits, RorMBuffer, false);
         }
         else
         {
@@ -260,29 +279,49 @@ ReadRorMField(struct parsed_inst *ParsedInst, char *RorMBuffer)
     else if(ParsedInst->Mod == MEM_MODE_DISP_8)
     {
         LookUpEffectiveAddress(ParsedInst, RorMBuffer);
-        u8 DispBits = ParsedInst->Binary[2];
-        if(DispBits > 0)
+        s8 DispBits = *(s8 *)(ParsedInst->Binary + 2);
+        if(DispBits != 0)
         {
-            strncat(RorMBuffer, " + ", 3);
             char DispBuffer[MAX_STRING_LEN] = {0};
-            GetIntAsString_8(DispBits, DispBuffer);
-            strncat(RorMBuffer, DispBuffer, MAX_STRING_LEN);
+
+            bool IsNegative = (DispBits < 0);
+            if(IsNegative)
+            {
+                strncat(RorMBuffer, " - ", 3);
+                GetIntAsString_8(DispBits, DispBuffer, true);
+                strncat( RorMBuffer, ((char *)(DispBuffer + 1)), (MAX_STRING_LEN - strlen(RorMBuffer)) );
+            }
+            else
+            {
+                strncat(RorMBuffer, " + ", 3);
+                GetIntAsString_8(DispBits, DispBuffer, true);
+                strncat( RorMBuffer, DispBuffer, (MAX_STRING_LEN - strlen(RorMBuffer)) );
+            }
         }
     }
-
     else if(ParsedInst->Mod == MEM_MODE_DISP_16)
     {
         LookUpEffectiveAddress(ParsedInst, RorMBuffer);
-        u16 DispBits = *(u16 *)(ParsedInst->Binary + 2);
-        if(DispBits > 0)
+        s16 DispBits = *(s16 *)(ParsedInst->Binary + 2);
+        if(DispBits != 0)
         {
-            strncat(RorMBuffer, " + ", 3);
             char DispBuffer[MAX_STRING_LEN] = {0};
-            GetIntAsString_16(DispBits, DispBuffer);
-            strncat(RorMBuffer, DispBuffer, MAX_STRING_LEN);
+
+            bool IsNegative = (DispBits < 0);
+            if(IsNegative)
+            {
+                strncat(RorMBuffer, " - ", 3);
+                GetIntAsString_16(DispBits, DispBuffer, true);
+                strncat( RorMBuffer, ((char *)(DispBuffer + 1)), (MAX_STRING_LEN - strlen(RorMBuffer)) );
+            }
+            else
+            {
+                strncat(RorMBuffer, " + ", 3);
+                GetIntAsString_16(DispBits, DispBuffer, true);
+                strncat( RorMBuffer, DispBuffer, (MAX_STRING_LEN - strlen(RorMBuffer)) );
+            }
         }
     }
-
     else 
     {
         // Error
@@ -293,22 +332,114 @@ ReadRorMField(struct parsed_inst *ParsedInst, char *RorMBuffer)
     strncat(RorMBuffer, "]", 1);
 }
 
-void
-ReadImmField(u8 *ImmValueBits, bool IsWord, char *ImmBuffer)
+bool
+CheckArithmetic(u8 OpcodeEnum)
 {
-    if(IsWord)
+    if(
+            (OpcodeEnum == ADD) ||
+            (OpcodeEnum == ADC) ||
+            (OpcodeEnum == SUB) ||
+            (OpcodeEnum == SBB) ||
+            (OpcodeEnum == CMP)   )
     {
-        u16 ImmValue = *(u16 *)ImmValueBits;
-        GetIntAsString_16(ImmValue, ImmBuffer);
+        return(true);
     }
     else
     {
-        u8 ImmValue = *(u8 *)ImmValueBits;
-        GetIntAsString_8(ImmValue, ImmBuffer);
+        return(false);
     }
 }
 
-// imm -> r/m
+
+void
+ReadImmField(struct parsed_inst *ParsedInst, u8 *ImmBits, char *ImmBuffer, bool IsArithmetic)
+{
+    if(ParsedInst->IsWord)
+    {
+        u16 ImmValue = 0;
+        if(IsArithmetic)
+        {
+            bool IsSignExtended = (bool)(ParsedInst->Binary[0] & 0x02);
+            if(IsSignExtended)
+            {
+                u8 Temp_u8 = *ImmBits;
+                ImmValue = (u16)Temp_u8;
+            }
+            else
+            {
+                ImmValue = *(u16 *)ImmBits;
+            }
+        }
+        else
+        {
+            ImmValue = *(u16 *)ImmBits;
+        }
+        GetIntAsString_16(ImmValue, ImmBuffer, false);
+    }
+    else
+    {
+        u8 ImmValue = *(u8 *)ImmBits;
+        GetIntAsString_8(ImmValue, ImmBuffer, false);
+    }
+}
+
+// [.... ...w] [mod <type> r/m] [disp-lo] [disp-hi]
+void
+Group3Decode(struct decoded_inst *DecodedInst)
+{
+// inc dh
+// ; hex: FE C6
+// ; bin: [1111 1110] [1100 0110]
+//
+// inc byte [bp + 1002]
+// ; hex: FE 86 EA 03
+// ; bin: [1111 1110] [1000 0110] [1110 1010] [0000 0011]
+
+    // need:
+    //      IsWord
+    //      Mod
+    //      RorM
+    //          if Mod == 11 then just get the reg
+    //          else call read RorM
+
+    struct parsed_inst ParsedInst = {0};
+    char RorMField[MAX_STRING_LEN] = {0};
+    u8 ByteOne = DecodedInst->Binary[0];
+    u8 ByteTwo = DecodedInst->Binary[1];
+
+    ParsedInst.Binary = DecodedInst->Binary;
+    ParsedInst.IsWord = (bool)(ByteOne & 0x01);
+    ParsedInst.Mod = ((ByteTwo & MOD_FIELD) >> 6);
+    ParsedInst.RorM = (ByteTwo & R_OR_M_FIELD);
+
+    DecodedInst->Size = 2;
+
+    if(ParsedInst.Mod != REG_MODE)
+    {
+        if(ParsedInst.IsWord)
+        {
+            strncat(RorMField, "word ", 5);
+        }
+        else
+        {
+            strncat(RorMField, "byte ", 5);
+        }
+        if(ParsedInst.Mod == MEM_MODE_DISP_8)
+        {
+            DecodedInst->Size += 1;
+        }
+        else if(ParsedInst.Mod == MEM_MODE_DISP_16)
+        {
+            DecodedInst->Size += 2;
+        }
+    }
+
+    ReadRorMField(&ParsedInst, RorMField);
+
+    strncpy( DecodedInst->OperandOne, RorMField, (MAX_STRING_LEN - strlen(RorMField)) );
+
+}
+
 void
 Group2Decode(struct decoded_inst *DecodedInst)
 {
@@ -323,12 +454,15 @@ Group2Decode(struct decoded_inst *DecodedInst)
     ParsedInst.Mod = ((ByteTwo & MOD_FIELD) >> 6);
     ParsedInst.RorM = (ByteTwo & R_OR_M_FIELD);
 
+    DecodedInst->Size = 3;
+
     ReadRorMField(&ParsedInst, RorMField);
     if(ParsedInst.Mod != REG_MODE)
     {
         if(ParsedInst.IsWord)
         {
             strncat(ImmField, "word ", 5);
+            DecodedInst->Size += 1;
         }
         else
         {
@@ -336,7 +470,6 @@ Group2Decode(struct decoded_inst *DecodedInst)
         }
     }
 
-    DecodedInst->Size = 2;
     u8 *ImmBytes = (ParsedInst.Binary + 2);
     if(ParsedInst.Mod == MEM_MODE_DISP_8)
     {
@@ -349,13 +482,14 @@ Group2Decode(struct decoded_inst *DecodedInst)
         ImmBytes += 2;
     }
 
-    ReadImmField(ImmBytes, ParsedInst.IsWord, ImmField);
+    bool IsArithmetic = CheckArithmetic(DecodedInst->OpcodeEnum);
+    ReadImmField(&ParsedInst, ImmBytes, ImmField, IsArithmetic);
 
     strncpy( DecodedInst->OperandOne, RorMField, (MAX_STRING_LEN - strlen(RorMField)) );
     strncpy( DecodedInst->OperandTwo, ImmField, (MAX_STRING_LEN - strlen(ImmField)) );
 }
 
-// r/m <-> reg
+// G1_RM_REG = 1,   // [.... ..dw] [mod reg r/m] [disp-lo] [disp-hi]
 void
 Group1Decode(struct decoded_inst *DecodedInst)
 {
@@ -702,10 +836,152 @@ ReadExtendedOpcode(struct decoded_inst *DecodedInst)
     }
 }
 
+#if 0
 void
 Dispatch(struct decoded_inst *DecodedInst)
 {
-#if 0
+    u8 ByteOne = DecodedInst->Binary[0];
+    switch(DecodedInst->OpcodeEnum)
+    {
+        case(MOV):
+        {
+            // 1:   1000 10dw
+            //      0x88-0x8B
+
+            // 3:   1000 1110
+            //      1000 1100
+            //      0x8C-0x8E
+
+            // 4:   1010 000w
+            //      1010 001w
+            //      0xA1-0xA3
+
+            // 5:   1011 w|reg
+            //      0xB0-0xBF
+
+            // 2:   1100 011w
+            //      0xC6-0xC7
+            if( (0x88 <= ByteOne) && (ByteOne <= 0x8B) )
+            {
+                Group1Decode(DecodedInst);
+            }
+            else if( (0x8C <= ByteOne) && (ByteOne <= 0x8E) )
+            {
+                Group3Decode(DecodedInst);
+            }
+            else if( (0xA1 <= ByteOne) && (ByteOne <= 0xA3) )
+            {
+                Group4Decode(DecodedInst);
+            }
+            else if( (0xB0 <= ByteOne) && (ByteOne <= 0xBF) )
+            {
+                Group5Decode(DecodedInst);
+            }
+            else if( (0xC6 <= ByteOne) && (ByteOne <= 0xC7) )
+            {
+                Group2Decode(DecodedInst);
+            }
+            else
+            {
+                // Error
+                Debug_PrintCurrentStatus(DecodedInst);
+                Debug_OutputErrorMessage("No matching decode function found for mov instruction");
+                exit(1);
+            }
+        } break;
+
+        case(PUSH):
+        {
+            //      000 reg 110 <-- we aren't doing this one right now. should route to error.
+
+            // 5:
+            //      0101 0reg
+            //      0x50-0x57
+
+            // 3:   
+            //      1111 1111
+            //      0xFF
+            if( (0x50 <= ByteOne) && (ByteOne <= 0x57) )
+            {
+                Group5Decode(DecodedInst);
+            }
+            else if(ByteOne == 0xFF)
+            {
+                Group3Decode(DecodedInst);
+            }
+            else 
+            {
+                // Error
+                Debug_PrintCurrentStatus(DecodedInst);
+                Debug_OutputErrorMessage("Encountered unsupported push instruction");
+                exit(1);
+            }
+        } break;
+
+        case(POP):
+        {
+            //      000 reg 111 <-- we aren't doing this one right now. should route to error.
+
+            // 5:
+            //      0101 1reg
+            //      0x58-0x5F
+
+            // 3:   1000 1111
+            //      0x8F
+            if( (0x58 <= ByteOne) && (ByteOne <= 0x5F) )
+            {
+                Group5Decode(DecodedInst);
+            }
+            else if(ByteOne == 0x8F)
+            {
+                Group3Decode(DecodedInst);
+            }
+            else 
+            {
+                // Error
+                Debug_PrintCurrentStatus(DecodedInst);
+                Debug_OutputErrorMessage("Encountered unsupported pop instruction");
+                exit(1);
+            }
+        } break;
+
+        case(SUB):
+        {
+            // 1:
+            //      0010 10dw
+            //      0x28-0x2B
+
+            // 2:
+            //      0010 110w
+            //      0x2C-0x2D
+
+            // 4: 
+            //      1000 00sw
+            //      0x80-0x82
+            if( (0x28 <= ByteOne) && (ByteOne <= 0x2B) )
+            {
+                Group1Decode(DecodedInst);
+            }
+            else if( (0x2C <= ByteOne) && (ByteOne <= 0x2D) )
+            {
+                Group2Decode(DecodedInst);
+            }
+            else if( (0x80 <= ByteOne) && (ByteOne <= 0x82) )
+            {
+                Group4Decode(DecodedInst);
+            }
+            else
+            {
+                // Error
+                Debug_PrintCurrentStatus(DecodedInst);
+                Debug_OutputErrorMessage("No matching decode function found for sub instruction");
+                exit(1);
+            }
+        } break;
+
+void
+Dispatch(struct decoded_inst *DecodedInst)
+{
     switch(DecodedInst->OpcodeEnum)
     {
         case(MOV):
@@ -854,7 +1130,6 @@ Dispatch(struct decoded_inst *DecodedInst)
             } break;
 
 
-#endif
         default:
             {
                 // Error
@@ -864,4 +1139,4 @@ Dispatch(struct decoded_inst *DecodedInst)
             } break;
     }
 }
-
+#endif
