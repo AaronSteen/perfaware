@@ -386,6 +386,83 @@ ReadImmField(struct parsed_inst *ParsedInst, u8 *ImmBits, char *ImmBuffer, bool 
     }
 }
 
+// G8_SHIFT,        // shifts/rotates D0–D3
+// [.... ..vw] [mod ... r/m] [disp-lo] [disp-hi]
+// rcr bp, 1
+// ; hex: D1 DD
+// ; bin: [1101 0001] [1101 1101]
+//
+// shl ah, cl
+// ; hex: D2 E4
+// ; bin: [1101 0010] [1110 0100]
+//
+// ; ------------------------------------------------------------------------
+// ; Group 8 — shifts/rotates with ModRM (D0–D3 by 1 or by CL)
+// ; ------------------------------------------------------------------------
+void
+Group8Decode(struct decoded_inst *DecodedInst)
+{
+    struct parsed_inst ParsedInst = {0};
+    u8 ByteOne = DecodedInst->Binary[0];
+    u8 ByteTwo = DecodedInst->Binary[1];
+    char DestBuffer[MAX_STRING_LEN] = {0};
+    char CountBuffer[MAX_STRING_LEN] = {0};
+
+    ParsedInst.Binary = DecodedInst->Binary;
+    bool VFlag = (bool)(ByteOne & 0x02);
+    ParsedInst.IsWord = (bool)(ByteOne & 0x01);
+    ParsedInst.Mod = ((ByteTwo & MOD_FIELD) >> 6);
+    ParsedInst.RorM = (ByteTwo & R_OR_M_FIELD);
+
+// [.... ..vw] [mod ... r/m] [disp-lo] [disp-hi]
+
+    DecodedInst->Size = 2;
+    if(ParsedInst.Mod != REG_MODE)
+    {
+        if(ParsedInst.IsWord)
+        {
+            strncat( DestBuffer, "word ", (MAX_STRING_LEN - strlen(DestBuffer)) );
+        }
+        else
+        {
+            strncat( DestBuffer, "byte ", (MAX_STRING_LEN - strlen(DestBuffer)) );
+        }
+
+        if( (ParsedInst.Mod == MEM_MODE_NO_DISP) && (ParsedInst.RorM == 0x06) )
+        {
+            // Direct address
+            DecodedInst->Size = 4;
+        }
+        else if(ParsedInst.Mod == MEM_MODE_DISP_8)
+        {
+            DecodedInst->Size += 1;
+        }
+        else if(ParsedInst.Mod == MEM_MODE_DISP_16)
+        {
+            DecodedInst->Size += 2;
+        }
+    }
+
+    ReadRorMField(&ParsedInst, DestBuffer);
+    strncat( DecodedInst->OperandOne, DestBuffer, 
+             (MAX_STRING_LEN - strlen(DecodedInst->OperandOne)) );
+
+    if(VFlag)
+    {
+        strncpy(DecodedInst->OperandTwo, "cl", 2);
+    }
+    else
+    {
+        strncpy(DecodedInst->OperandTwo, "1", 1);
+    }
+}
+
+
+
+
+
+
+
 // ; ------------------------------------------------------------------------
 // ; Group 6 — reg encoded in opcode + immediate (B0–BF MOV r,imm)
 // ; ------------------------------------------------------------------------

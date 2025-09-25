@@ -66,12 +66,12 @@ main(int argc, char **argv)
                 DecodedInst.Size = 1;
             } break;
 
-#if 0
             case 8:
             {
                 Group8Decode(&DecodedInst);
             } break;
 
+#if 0
             case 9:
             {
                 Group9Decode(&DecodedInst);
