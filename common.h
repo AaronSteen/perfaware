@@ -171,7 +171,7 @@ enum
     G3_UNARY_RM,     // [.... ...w] [mod <type> r/m] [disp-lo] [disp-hi]
     G4_ACC_IMM,      // [.... ...w] [data] [data]
     G5_OPREG_NODATA,        // [.... .reg] (no trailing immediate value)
-    G6_OPREG_IMM,    // [.... .reg] [data] [data] (up to two bytes for trailing imm value)
+    G6_OPREG_IMM,    // [.... w reg] [data] [data] (up to two bytes for trailing imm value)
     G7_ONEBYTE,      // one byte with no operands
     G8_SHIFT,        // shifts/rotates D0–D3
     G9_CTRL_IO       // control-transfer + I/O (Jcc, loop/jcxz, call/jmp/ret/int, IN/OUT)
@@ -218,7 +218,7 @@ u8 ByteOneToDecodeGroupLUT[256] =
     /*C0*/ G7_ONEBYTE,  G7_ONEBYTE,  G9_CTRL_IO,  G9_CTRL_IO,  G1_RM_REG,   G1_RM_REG,   G2_IMM_RM,   G2_IMM_RM,     
     /*C8*/ G7_ONEBYTE,  G7_ONEBYTE,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G8_SHIFT,    G8_SHIFT,       
 
-    /*D0*/ G8_SHIFT,    G8_SHIFT,    G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G1_RM_REG,   G1_RM_REG,       
+    /*D0*/ G8_SHIFT,    G8_SHIFT,    G8_SHIFT, G8_SHIFT, G7_ONEBYTE, G7_ONEBYTE, G7_ONEBYTE, G7_ONEBYTE,
     /*D8*/ G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,        
 
     /*E0*/ G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,        

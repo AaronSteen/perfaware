@@ -386,6 +386,56 @@ ReadImmField(struct parsed_inst *ParsedInst, u8 *ImmBits, char *ImmBuffer, bool 
     }
 }
 
+// ; ------------------------------------------------------------------------
+// ; Group 6 — reg encoded in opcode + immediate (B0–BF MOV r,imm)
+// ; ------------------------------------------------------------------------
+//
+// G6_OPREG_IMM,    // [.... w reg] [data] [data] (up to two bytes for trailing imm value)
+//
+// mov cl, 12
+// ; hex: B1 0C
+// ; bin: [1011 0001] [0000 1100]
+//
+// mov ch, -12
+// ; hex: B5 F4
+// ; bin: [1011 0101] [1111 0100]
+void
+Group6Decode(struct decoded_inst *DecodedInst)
+{
+    struct parsed_inst ParsedInst = {0};
+    u8 ByteOne = DecodedInst->Binary[0];
+    u8 ByteTwo = DecodedInst->Binary[1];
+    char RegBuffer[MAX_STRING_LEN] = {0};
+    char ImmBuffer[MAX_STRING_LEN] = {0};
+
+    ParsedInst.Binary = DecodedInst->Binary;
+    ParsedInst.Reg = (ByteOne & 0x07);
+    ParsedInst.IsWord = (bool)(ByteOne & 0x08);
+    DecodedInst->Size = 2;
+
+    LookUpReg(&ParsedInst, RegBuffer);
+    u8 *ImmBits = (DecodedInst->Binary + 1);
+
+    bool IsSigned = true;
+    bool CareAboutSignExtend = false;
+
+    if(ParsedInst.IsWord)
+    {
+        DecodedInst->Size += 1;
+        ReadImmField(&ParsedInst, ImmBits, ImmBuffer, CareAboutSignExtend, IsSigned);
+    }
+    else
+    {
+        ReadImmField(&ParsedInst, ImmBits, ImmBuffer, CareAboutSignExtend, IsSigned);
+    }
+
+    strncpy( DecodedInst->OperandOne, RegBuffer, (MAX_STRING_LEN - strlen(RegBuffer)) );
+    strncpy( DecodedInst->OperandTwo, ImmBuffer, (MAX_STRING_LEN - strlen(ImmBuffer)) );
+}
+
+
+
+
 // G5_OPREG_NODATA,        // [.... .reg] (no trailing immediate value)
 // ; ------------------------------------------------------------------------
 // ; Group 5 — reg encoded in opcode, no trailing data
@@ -927,307 +977,3 @@ ReadExtendedOpcode(struct decoded_inst *DecodedInst)
     }
 }
 
-#if 0
-void
-Dispatch(struct decoded_inst *DecodedInst)
-{
-    u8 ByteOne = DecodedInst->Binary[0];
-    switch(DecodedInst->OpcodeEnum)
-    {
-        case(MOV):
-        {
-            // 1:   1000 10dw
-            //      0x88-0x8B
-
-            // 3:   1000 1110
-            //      1000 1100
-            //      0x8C-0x8E
-
-            // 4:   1010 000w
-            //      1010 001w
-            //      0xA1-0xA3
-
-            // 5:   1011 w|reg
-            //      0xB0-0xBF
-
-            // 2:   1100 011w
-            //      0xC6-0xC7
-            if( (0x88 <= ByteOne) && (ByteOne <= 0x8B) )
-            {
-                Group1Decode(DecodedInst);
-            }
-            else if( (0x8C <= ByteOne) && (ByteOne <= 0x8E) )
-            {
-                Group3Decode(DecodedInst);
-            }
-            else if( (0xA1 <= ByteOne) && (ByteOne <= 0xA3) )
-            {
-                Group4Decode(DecodedInst);
-            }
-            else if( (0xB0 <= ByteOne) && (ByteOne <= 0xBF) )
-            {
-                Group5Decode(DecodedInst);
-            }
-            else if( (0xC6 <= ByteOne) && (ByteOne <= 0xC7) )
-            {
-                Group2Decode(DecodedInst);
-            }
-            else
-            {
-                // Error
-                Debug_PrintCurrentStatus(DecodedInst);
-                Debug_OutputErrorMessage("No matching decode function found for mov instruction");
-                exit(1);
-            }
-        } break;
-
-        case(PUSH):
-        {
-            //      000 reg 110 <-- we aren't doing this one right now. should route to error.
-
-            // 5:
-            //      0101 0reg
-            //      0x50-0x57
-
-            // 3:   
-            //      1111 1111
-            //      0xFF
-            if( (0x50 <= ByteOne) && (ByteOne <= 0x57) )
-            {
-                Group5Decode(DecodedInst);
-            }
-            else if(ByteOne == 0xFF)
-            {
-                Group3Decode(DecodedInst);
-            }
-            else 
-            {
-                // Error
-                Debug_PrintCurrentStatus(DecodedInst);
-                Debug_OutputErrorMessage("Encountered unsupported push instruction");
-                exit(1);
-            }
-        } break;
-
-        case(POP):
-        {
-            //      000 reg 111 <-- we aren't doing this one right now. should route to error.
-
-            // 5:
-            //      0101 1reg
-            //      0x58-0x5F
-
-            // 3:   1000 1111
-            //      0x8F
-            if( (0x58 <= ByteOne) && (ByteOne <= 0x5F) )
-            {
-                Group5Decode(DecodedInst);
-            }
-            else if(ByteOne == 0x8F)
-            {
-                Group3Decode(DecodedInst);
-            }
-            else 
-            {
-                // Error
-                Debug_PrintCurrentStatus(DecodedInst);
-                Debug_OutputErrorMessage("Encountered unsupported pop instruction");
-                exit(1);
-            }
-        } break;
-
-        case(SUB):
-        {
-            // 1:
-            //      0010 10dw
-            //      0x28-0x2B
-
-            // 2:
-            //      0010 110w
-            //      0x2C-0x2D
-
-            // 4: 
-            //      1000 00sw
-            //      0x80-0x82
-            if( (0x28 <= ByteOne) && (ByteOne <= 0x2B) )
-            {
-                Group1Decode(DecodedInst);
-            }
-            else if( (0x2C <= ByteOne) && (ByteOne <= 0x2D) )
-            {
-                Group2Decode(DecodedInst);
-            }
-            else if( (0x80 <= ByteOne) && (ByteOne <= 0x82) )
-            {
-                Group4Decode(DecodedInst);
-            }
-            else
-            {
-                // Error
-                Debug_PrintCurrentStatus(DecodedInst);
-                Debug_OutputErrorMessage("No matching decode function found for sub instruction");
-                exit(1);
-            }
-        } break;
-
-void
-Dispatch(struct decoded_inst *DecodedInst)
-{
-    switch(DecodedInst->OpcodeEnum)
-    {
-        case(MOV):
-            enum 
-            {
-                MOV_MEMorREG_TOorFROM_REG = 0x88,
-                MOV_IMM_TO_REGorMEM = 0xC6,
-                MOV_IMM_TO_REG = 0xB0,
-                MOV_MEM_TO_ACCUM = 0xA0,
-                MOV_ACCUM_TO_MEM = 0xA2,
-                MOV_REGorMEM_TO_SEGREG = 0x8E,
-                MOV_SEGREG_TO_REGorMEM = 0x8C,
-            };
-            // if( DecodedInst->Binary[0] );
-            //     Group1Decode(DecodedInst);
-            } break;
-
-        case(MOV):
-            {
-                if( (0xB1 <= DecodedInst->OpcodeEnum) &&
-                        (DecodedInst->OpcodeEnum <= 0xBA) )
-                {
-                    Group5Decode(DecodedInst);
-                }
-                else
-                {
-                    Group1Decode(DecodedInst);
-                }
-            } break;
-        case(PUSH):
-            {
-                DecodePush(DecodedInst);
-            } break;
-
-        case(POP):
-            {
-                DecodePop(DecodedInst);
-            } break;
-
-        case(XCHG):
-        case(NOP):
-            {
-                DecodeXchg(DecodedInst);
-            } break;
-
-        case(IN_):
-        case(OUT_):
-            {
-                DecodeInOrOut(DecodedInst);
-            } break;
-
-        case(LEA):
-        case(LDS):
-        case(LES):
-            {
-                DecodeLoad(DecodedInst);
-            } break;
-
-        case(ADD):
-        case(ADC):
-        case(SUB):
-        case(SBB):
-        case(CMP):
-            {
-                DecodeArithmetic(DecodedInst);
-            } break;
-
-        case(INC):
-        case(DEC):
-            {
-                DecodeIncOrDec(DecodedInst);
-            } break;
-
-        case(XLAT): 
-        case(LAHF):
-        case(SAHF):
-        case(PUSHF):
-        case(POPF):
-        case(AAA):
-        case(DAA):
-        case(AAS):
-        case(DAS):
-        case(CBW):
-        case(CWD):
-        case(INTO):
-        case(IRET):
-        case(CLC):
-        case(CMC):
-        case(STC):
-        case(CLD):
-        case(STD):
-        case(CLI):
-        case(STI):
-        case(HLT):
-        case(WAIT):
-        case(RET):
-            {
-                DecodedInst->Size = 1;
-                return;
-            } break;
-
-        case(AAM):
-        case(AAD):
-            {
-                DecodedInst->Size = 2;
-                return;
-            } break;
-
-        case(NEG):
-        case(NOT):
-            
-            {
-                DecodeGroup3(DecodedInst);
-                return;
-            } break;
-
-        case(MUL):
-        case(IMUL):
-        case(DIV):
-        case(IDIV):
-            {
-                DecodeGroup3(DecodedInst);
-                return;
-            } break;
-
-        case(SHL):
-        case(SHR):
-        case(SAR):
-        case(ROL):
-        case(ROR):
-        case(RCL):
-        case(RCR):
-            {
-                DecodeGroup3(DecodedInst);
-
-                BOOL VFlag = ((DecodedInst->Binary[0] & 0x02) >> 1);
-                if(VFlag)
-                {
-                    SteenCopy(DecodedInst->OperandTwo, "cl", 2);
-                }
-                else
-                {
-                    SteenCopy(DecodedInst->OperandTwo, "1", 1);
-                }
-                return;
-            } break;
-
-
-        default:
-            {
-                // Error
-                Debug_PrintCurrentStatus(DecodedInst);
-                Debug_OutputErrorMessage("No matching dispatch function");
-                exit(1);
-            } break;
-    }
-}
-#endif

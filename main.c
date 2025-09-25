@@ -56,7 +56,6 @@ main(int argc, char **argv)
                 Group5Decode(&DecodedInst);
             } break;
 
-#if 0
             case 6:
             {
                 Group6Decode(&DecodedInst);
@@ -64,9 +63,10 @@ main(int argc, char **argv)
 
             case 7:
             {
-                Group7Decode(&DecodedInst);
+                DecodedInst.Size = 1;
             } break;
 
+#if 0
             case 8:
             {
                 Group8Decode(&DecodedInst);
