@@ -386,6 +386,253 @@ ReadImmField(struct parsed_inst *ParsedInst, u8 *ImmBits, char *ImmBuffer, bool 
     }
 }
 
+void
+InOutDecode(struct decoded_inst *DecodedInst)
+{
+    // IN
+    //      Fixed port: [1110 010w] [data-8]
+    //      Variable port: [1110 110w] (assume d register stores port address)
+
+    // OUT
+    //      Fixed port: [1110 011w] [data-8]
+    //      Variable port: [1110 111w] (assume d register stores port address)
+
+    struct parsed_inst ParsedInst = {0};
+    u8 ByteOne = DecodedInst->Binary[0];
+    u8 ByteTwo = DecodedInst->Binary[1];
+    char AccumBuffer[MAX_STRING_LEN] = {0};
+    char PortBuffer[MAX_STRING_LEN] = {0};
+
+    ParsedInst.Binary = DecodedInst->Binary;
+    ParsedInst.IsWord = (bool)(ByteOne & 0x01);
+    bool IsVariablePort = (bool)(ByteOne & 0x08);
+
+    DecodedInst->Size = 1;
+    if(ParsedInst.IsWord)
+    {
+        strncpy(AccumBuffer, "ax", 2);
+    }
+    else
+    {
+        strncpy(AccumBuffer, "al", 2);
+    }
+    
+    if(IsVariablePort)
+    {
+        strncpy(PortBuffer, "dx", 2);
+    }
+    else
+    {
+        DecodedInst->Size = 2;
+        bool IsSigned = false;
+        GetIntAsString_8(DecodedInst->Binary[1], PortBuffer, IsSigned);
+    }
+
+    if(DecodedInst->OpcodeEnum == IN_)
+    {
+        strncpy(DecodedInst->OperandOne, AccumBuffer, MAX_STRING_LEN);
+        strncpy(DecodedInst->OperandTwo, PortBuffer, MAX_STRING_LEN);
+    }
+    else
+    {
+        strncpy(DecodedInst->OperandOne, PortBuffer, MAX_STRING_LEN);
+        strncpy(DecodedInst->OperandTwo, AccumBuffer, MAX_STRING_LEN);
+    }
+}
+
+void
+RepeatDecode(struct decoded_inst *DecodedInst)
+{
+    // move
+    // compare
+    // scan
+    // load
+    // store
+    enum
+    {
+        MOVSB = 0xA4,
+        MOVSW = 0xA5,
+        CMPSB = 0xA6,
+        CMPSW = 0xA7,
+        STOSB = 0xAA,
+        STOSW = 0xAB,
+        LODSB = 0xAC,
+        LODSW = 0xAD,
+        SCASB = 0xAE,
+        SCASW = 0xAF,
+    } StringOpEnums;
+
+    DecodedInst->Size = 2;
+
+    char *StringInst = NULLPTR;
+    switch(DecodedInst->Binary[1])
+    {
+        case MOVSB:
+        {
+            StringInst = "movsb";
+        } break;
+
+        case MOVSW:
+        {
+            StringInst = "movsw";
+        } break;
+        
+        case CMPSB:
+        {
+            StringInst = "cmpsb";
+        } break;
+
+        case CMPSW:
+        {
+            StringInst = "cmpsw";
+        } break;
+
+        case STOSB:
+        {
+            StringInst = "stosb";
+        } break;
+
+        case STOSW:
+        {
+            StringInst = "stosw";
+        } break;
+
+        case LODSB:
+        {
+            StringInst = "lodsb";
+        } break;
+
+        case LODSW:
+        {
+            StringInst = "lodsw";
+        } break;
+
+        case SCASB:
+        {
+            StringInst = "scasb";
+        } break;
+
+        case SCASW:
+        {
+            StringInst = "scasw";
+        } break;
+
+        default:
+        {
+            Debug_OutputErrorMessage("Failed to find matching string instruction for repeat instruction"); 
+            exit(1);
+        } break;
+    }
+
+    strncpy(DecodedInst->OperandOne, StringInst, MAX_STRING_LEN);
+}
+
+void
+CallJumpDecode(struct decoded_inst *DecodedInst)
+{
+    // Direct within segment
+    //      [1110 1000] [IP-INC-LO] [IP-INC-HI]
+    //
+    // Direct intersegment
+    //      [1001 1010] [IP-lo] [IP-hi]
+    //                 [CS-lo] [CS-hi]
+
+    struct parsed_inst ParsedInst = {0};
+    u8 ByteOne = DecodedInst->Binary[0];
+    u8 ByteTwo = DecodedInst->Binary[1];
+    ParsedInst.Mod = ((ByteTwo & MOD_FIELD) >> 6);
+    ParsedInst.RorM = (ByteTwo & R_OR_M_FIELD);
+    ParsedInst.IsWord = true;
+    ParsedInst.Binary = DecodedInst->Binary;
+
+    if(ByteOne == 0xFF)
+    {
+        ReadRorMField(&ParsedInst, DecodedInst->OperandOne);
+        DecodedInst->Size = 2;
+        if( (ParsedInst.Mod == MEM_MODE_NO_DISP) && (ParsedInst.RorM == 0x06) )
+        {
+            // Direct address
+            DecodedInst->Size = 4;
+        }
+        else if(ParsedInst.Mod == MEM_MODE_DISP_8)
+        {
+            DecodedInst->Size += 1;
+        }
+        else if(ParsedInst.Mod == MEM_MODE_DISP_16)
+        {
+            DecodedInst->Size += 2;
+        }
+    }
+    else
+    {
+        Debug_OutputErrorMessage("call expression does not have 0xFF as byte one, so no codepath to decode it yet"); 
+        exit(1);
+    }
+}
+
+bool
+IsThisALabelInstruction(u8 OpcodeEnum)
+{
+    u8 LabelInstructions[] = 
+    {
+        JE, JL, JLE, JB, JBE, JP, JO, JS, JNE, JNL, 
+        JG, JNB, JA, JNP, JNO, JNS, LOOP, LOOPZ, LOOPNZ, JCXZ
+    };
+
+    for(int i = 0; i < sizeof(LabelInstructions); ++i)
+    {
+        if(LabelInstructions[i] == OpcodeEnum)
+        {
+            return(true);
+        }
+    }
+    return(false);
+}
+
+void
+Group9Decode(struct decoded_inst *DecodedInst)
+{
+    if( (DecodedInst->OpcodeEnum == IN_) || (DecodedInst->OpcodeEnum == OUT_) )
+    {
+        InOutDecode(DecodedInst);
+    }
+    else if(DecodedInst->OpcodeEnum == REP)
+    {
+        RepeatDecode(DecodedInst);
+    }
+    else if( (DecodedInst->OpcodeEnum == CALL) || (DecodedInst->OpcodeEnum == JMP) )
+    {
+        CallJumpDecode(DecodedInst);
+    }
+    else if(DecodedInst->OpcodeEnum == RET)
+    {
+        DecodedInst->Size = 3;
+        bool IsSigned = true;
+        GetIntAsString_16( (*(u16 *)(DecodedInst->Binary + 1)), DecodedInst->OperandOne, IsSigned);
+    }
+    else if(IsThisALabelInstruction(DecodedInst->OpcodeEnum))
+    {
+        DecodedInst->Size = 2;
+        strncpy(DecodedInst->OperandOne, "label", MAX_STRING_LEN);
+    }
+    else if(DecodedInst->OpcodeEnum == INT_)
+    {
+        DecodedInst->Size = 2;
+        bool IsSigned = false;
+        GetIntAsString_8(DecodedInst->Binary[1], DecodedInst->OperandOne, IsSigned);
+    }
+    else
+    {
+        Debug_OutputErrorMessage("No matching decode function in group 9"); 
+        exit(1);
+    }
+
+        
+
+
+}
+
+
 // G8_SHIFT,        // shifts/rotates D0–D3
 // [.... ..vw] [mod ... r/m] [disp-lo] [disp-hi]
 // rcr bp, 1

@@ -72,20 +72,20 @@ enum
     JMP = 20,
     JO = 21,
     JNO = 22,
-    TBD_JNB = 23,     // jnb / jae / jnc
-    TBD_JB  = 24,     // jb / jnae / jc
-    TBD_JE  = 25,     // je / jz
-    TBD_JNE = 26,     // jne / jnz
-    TBD_JBE = 27,     // jbe / jna
-    TBD_JA  = 28,     // jnbe / ja
+    JNB = 23,     // jnb / jae / jnc
+    JB  = 24,     // jb / jnae / jc
+    JE  = 25,     // je / jz
+    JNE = 26,     // jne / jnz
+    JBE = 27,     // jbe / jna
+    JA  = 28,     // jnbe / ja
     JS = 29,
     JNS = 30,
-    TBD_JP  = 31,     // jp / jpe
-    TBD_JNP = 32,     // jnp / jpo
-    TBD_JL  = 33,     // jl / jnge
-    TBD_JGE = 34,     // jnl / jge
-    TBD_JLE = 35,     // jle / jng
-    TBD_JG  = 36,     // jnle / jg
+    JP  = 31,     // jp / jpe
+    JNP = 32,     // jnp / jpo
+    JL  = 33,     // jl / jnge
+    JNL = 34,     // jnl / jge
+    JLE = 35,     // jle / jng
+    JG  = 36,     // jnle / jg
     TEST = 37,
     XCHG = 38,
     MOV = 39,
@@ -107,7 +107,7 @@ enum
     RET = 55,
     LES = 56,
     LDS = 57,
-    /*INT = 58,*/      // optionally re-enable
+    INT_ = 58,      // optionally re-enable
     INTO = 59,
     IRET = 60,
     ROL = 61,
@@ -121,15 +121,15 @@ enum
     AAD = 69,
     XLAT = 70,
     ESC = 71,
-    TBD_LOOPNE = 72,   // loopne / loopnz
-    TBD_LOOPE  = 73,   // loope / loopz
+    LOOPNZ = 72,   // loopne / loopnz
+    LOOPZ  = 73,   // loope / loopz
     LOOP = 74,
     JCXZ = 75,
     IN_ = 76,
     OUT_ = 77,
     LOCK = 78,
-    TBD_REPNE = 79,    // repne / repnz
-    TBD_REP   = 80,    // rep / repe / repz
+    REPNE = 79,    // repne / repnz
+    REP   = 80,    // rep / repe / repz
     HLT = 81,
     CMC = 82,
     NOT = 83,
@@ -145,6 +145,7 @@ enum
     CLD = 93,
     STD = 94,
     EXTENDED = 95,
+    INT3 = 96,
     NOTUSED = 99
 } opcodes;
 
@@ -174,7 +175,7 @@ enum
     G6_OPREG_IMM,    // [.... w reg] [data] [data] (up to two bytes for trailing imm value)
     G7_ONEBYTE,      // one byte with no operands
     G8_SHIFT,        // shifts/rotates D0–D3
-    G9_CTRL_IO       // control-transfer + I/O (Jcc, loop/jcxz, call/jmp/ret/int, IN/OUT)
+    G9_MISC,      // miscellaneous; mostly I/O, control flow
 } DecodeGroup;
 
 u8 ByteOneToDecodeGroupLUT[256] =
@@ -200,14 +201,14 @@ u8 ByteOneToDecodeGroupLUT[256] =
     /*60*/ G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,
     /*68*/ G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,
 
-    /*70*/ G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,
-    /*78*/ G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,
+    /*70*/ G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,
+    /*78*/ G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,
 
     /*80*/ G2_IMM_RM,   G2_IMM_RM,   G2_IMM_RM,   G2_IMM_RM,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG, 
     /*88*/ G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G3_UNARY_RM,
 
     /*90*/ G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA,
-    /*98*/ G7_ONEBYTE,  G7_ONEBYTE,  G9_CTRL_IO,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE, 
+    /*98*/ G7_ONEBYTE,  G7_ONEBYTE,  G9_MISC,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE, 
 
     /*A0*/ G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,   
     /*A8*/ G4_ACC_IMM,  G4_ACC_IMM,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  
@@ -215,17 +216,17 @@ u8 ByteOneToDecodeGroupLUT[256] =
     /*B0*/ G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM,
     /*B8*/ G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM,
 
-    /*C0*/ G7_ONEBYTE,  G7_ONEBYTE,  G9_CTRL_IO,  G9_CTRL_IO,  G1_RM_REG,   G1_RM_REG,   G2_IMM_RM,   G2_IMM_RM,     
-    /*C8*/ G7_ONEBYTE,  G7_ONEBYTE,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G8_SHIFT,    G8_SHIFT,       
+    /*C0*/ G7_ONEBYTE,  G7_ONEBYTE,  G9_MISC,  G7_ONEBYTE,  G1_RM_REG,   G1_RM_REG,   G2_IMM_RM,   G2_IMM_RM,     
+    /*C8*/ G7_ONEBYTE,  G7_ONEBYTE,  G9_MISC,  G7_ONEBYTE,  G7_ONEBYTE,  G9_MISC,  G7_ONEBYTE,    G7_ONEBYTE,       
 
     /*D0*/ G8_SHIFT,    G8_SHIFT,    G8_SHIFT, G8_SHIFT, G7_ONEBYTE, G7_ONEBYTE, G7_ONEBYTE, G7_ONEBYTE,
     /*D8*/ G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,        
 
-    /*E0*/ G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,        
-    /*E8*/ G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,  G9_CTRL_IO,         
+    /*E0*/ G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,        
+    /*E8*/ G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,         
 
-    /*F0*/ G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G3_UNARY_RM, G3_UNARY_RM,         
-    /*F8*/ G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G3_UNARY_RM, G3_UNARY_RM          
+    /*F0*/ G7_ONEBYTE,  G7_ONEBYTE,  G9_MISC,  G9_MISC,  G7_ONEBYTE,  G7_ONEBYTE,  G3_UNARY_RM, G3_UNARY_RM,         
+    /*F8*/ G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G3_UNARY_RM, G9_MISC       
 };
 
 u8 ByteOneToOpcodeEnumLUT[] =
@@ -272,11 +273,11 @@ u8 ByteOneToOpcodeEnumLUT[] =
     [0x68] = NOTUSED,   [0x69] = NOTUSED,   [0x6A] = NOTUSED,   [0x6B] = NOTUSED,
     [0x6C] = NOTUSED,   [0x6D] = NOTUSED,   [0x6E] = NOTUSED,   [0x6F] = NOTUSED,
 
-    [0x70] = JO,        [0x71] = JNO,       [0x72] = TBD_JB,    [0x73] = TBD_JNB,
-    [0x74] = TBD_JE,    [0x75] = TBD_JNE,   [0x76] = TBD_JBE,   [0x77] = TBD_JA,
+    [0x70] = JO,        [0x71] = JNO,       [0x72] = JB,    [0x73] = JNB,
+    [0x74] = JE,    [0x75] = JNE,   [0x76] = JBE,   [0x77] = JA,
 
-    [0x78] = JS,        [0x79] = JNS,       [0x7A] = TBD_JP,    [0x7B] = TBD_JNP,
-    [0x7C] = TBD_JL,    [0x7D] = TBD_JGE,   [0x7E] = TBD_JLE,   [0x7F] = TBD_JG,
+    [0x78] = JS,        [0x79] = JNS,       [0x7A] = JP,    [0x7B] = JNP,
+    [0x7C] = JL,    [0x7D] = JNL,   [0x7E] = JLE,   [0x7F] = JG,
 
     [0x80] = EXTENDED,  [0x81] = EXTENDED,  [0x82] = EXTENDED,  [0x83] = EXTENDED,
     [0x84] = TEST,      [0x85] = TEST,      [0x86] = XCHG,      [0x87] = XCHG,
@@ -306,16 +307,16 @@ u8 ByteOneToOpcodeEnumLUT[] =
     [0xC4] = LES,       [0xC5] = LDS,       [0xC6] = MOV,       [0xC7] = MOV,
 
     [0xC8] = NOTUSED,   [0xC9] = NOTUSED,   [0xCA] = RET,       [0xCB] = RET,
-    [0xCE] = INTO,      [0xCF] = IRET,      [0xD0] = EXTENDED,  [0xD1] = EXTENDED,
+    [0xCC] = INT3,      [0xCD] = INT_,      [0xCE] = INTO,      [0xCF] = IRET,      
 
-    [0xD2] = EXTENDED,  [0xD3] = EXTENDED,  [0xD4] = AAM,       [0xD5] = AAD,       
-    [0xD6] = NOTUSED,
-    [0xD7] = XLAT,      [0xD8] = ESC,       [0xDF] = ESC,       [0xE0] = TBD_LOOPNE,
+    [0xD0] = EXTENDED,  [0xD1] = EXTENDED, [0xD2] = EXTENDED,  [0xD3] = EXTENDED,  
+    [0xD4] = AAM,       [0xD5] = AAD,       [0xD6] = NOTUSED,  [0xD7] = XLAT,      
 
-    [0xE1] = TBD_LOOPE, [0xE2] = LOOP,      [0xE3] = JCXZ,      [0xE8] = CALL,
-    [0xE9] = JMP,       [0xEA] = JMP,       [0xEB] = JMP,       [0xF0] = LOCK,
+    [0xD8] = ESC,       [0xDF] = ESC,       [0xE0] = LOOPNZ,    [0xE1] = LOOPZ, 
+    [0xE2] = LOOP,      [0xE3] = JCXZ,      [0xE8] = CALL,      [0xE9] = JMP,       
+    [0xEA] = JMP,       [0xEB] = JMP,       [0xF0] = LOCK,
 
-    [0xF1] = NOTUSED,   [0xF2] = TBD_REPNE, [0xF3] = TBD_REP,   [0xF4] = HLT,
+    [0xF1] = NOTUSED,   [0xF2] = REPNE, [0xF3] = REP,   [0xF4] = HLT,
     [0xF5] = CMC,       [0xF6] = EXTENDED,  [0xF7] = EXTENDED,  [0xF8] = CLC,
 
     [0xF9] = STC,       [0xFA] = CLI,       [0xFB] = STI,       [0xFC] = CLD,
@@ -334,20 +335,20 @@ char *OpcodeEnumToStringLUT[255] = {
     [XOR] = "xor",        [SSprefix] = "ss",    [AAA] = "aaa",        [CMP] = "cmp",
 
     [DSprefix] = "ds",    [AAS] = "aas",        [INC] = "inc",        [DEC] = "dec",
-    [JMP] = "jmp",        [JO] = "jo",          [JNO] = "jno",        [TBD_JNB] = "TBD",     // jnb / jae / jnc
+    [JMP] = "jmp",        [JO] = "jo",          [JNO] = "jno",        [JNB] = "jnb",     // jnb / jae / jnc
 
-    [TBD_JB] = "TBD",     // jb / jnae / jc
-    [TBD_JE] = "TBD",     // je / jz
-    [TBD_JNE] = "TBD",    // jne / jnz
-    [TBD_JBE] = "TBD",    // jbe / jna
-    [TBD_JA] = "TBD",     // jnbe / ja
-    [JS] = "js",          [JNS] = "jns",        [TBD_JP] = "TBD",     // jp / jpe
+    [JB] = "jb",     // jb / jnae / jc
+    [JE] = "je",     // je / jz
+    [JNE] = "jne",    // jne / jnz
+    [JBE] = "jbe",    // jbe / jna
+    [JA] = "ja",     // jnbe / ja
+    [JS] = "js",          [JNS] = "jns",        [JP] = "jp",     // jp / jpe
 
-    [TBD_JNP] = "TBD",    // jnp / jpo
-    [TBD_JL] = "TBD",     // jl / jnge
-    [TBD_JGE] = "TBD",    // jnl / jge
-    [TBD_JLE] = "TBD",    // jle / jng
-    [TBD_JG] = "TBD",     // jnle / jg
+    [JNP] = "jnp",    // jnp / jpo
+    [JL] = "jl",     // jl / jnge
+    [JNL] = "jnl",    // jnl / jge
+    [JLE] = "jle",    // jle / jng
+    [JG] = "jg",     // jnle / jg
     [TEST] = "test",      [XCHG] = "xchg",      [MOV] = "mov",
 
     [LEA] = "lea",        [NOP] = "nop",        [CBW] = "cbw",        [CWD] = "cwd",
@@ -356,24 +357,25 @@ char *OpcodeEnumToStringLUT[255] = {
     [SAHF] = "sahf",      [LAHF] = "lahf",      [MOVS] = "movs",      [CMPS] = "cmps",
     [STOS] = "stos",      [LODS] = "lods",      [SCAS] = "scas",      [RET] = "ret",
 
-    [LES] = "les",        [LDS] = "lds",        [INTO] = "into",      [IRET] = "iret",
+    [LES] = "les",        [LDS] = "lds",        [INT_] = "int",
+    [INTO] = "into",      [IRET] = "iret",
     [ROL] = "rol",        [ROR] = "ror",        [RCL] = "rcl",        [RCR] = "rcr",
 
     [SHL] = "shl",
     [SHR] = "shr",        [SAR] = "sar",        [AAM] = "aam",
-    [AAD] = "aad",        [XLAT] = "xlat",      [ESC] = "esc",        [TBD_LOOPNE] = "TBD",  // loopne / loopnz
+    [AAD] = "aad",        [XLAT] = "xlat",      [ESC] = "esc",        [LOOPNZ] = "loopnz",  // loopne / loopnz
 
-    [TBD_LOOPE] = "TBD",  // loope / loopz
+    [LOOPZ] = "loopz",  // loope / loopz
     [LOOP] = "loop",      [JCXZ] = "jcxz",	[IN_] = "in",	      [LOCK] = "lock",
-    [TBD_REPNE] = "TBD",  // repne / repnz
-    [TBD_REP] = "TBD",    // rep / repe / repz
+    [REPNE] = "repne",  // repne / repnz
+    [REP] = "rep",    // rep / repe / repz
     [HLT] = "hlt",        [CMC] = "cmc",
 
     [NOT] = "not",        [NEG] = "neg",        [MUL] = "mul",        [IMUL] = "imul",
     [DIV] = "div",        [IDIV] = "idiv",      [CLC] = "clc",        [STC] = "stc",
 
     [CLI] = "cli",        [STI] = "sti",        [CLD] = "cld",        [STD] = "std",
-    [EXTENDED] = "extended", [NOTUSED] = "notused",
+    [INT3] = "int3",      [EXTENDED] = "extended",                    [NOTUSED] = "notused",
 
     [OUT_] = "out",
 };

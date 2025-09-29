@@ -28,7 +28,7 @@ main(int argc, char **argv)
         DecodedInst.Mnemonic = OpcodeEnumToStringLUT[DecodedInst.OpcodeEnum];
 
         DecodedInst.DecodeGroup = ByteOneToDecodeGroupLUT[DecodedInst.Binary[0]];
-        
+
         switch(DecodedInst.DecodeGroup)
         {
             case 1:
@@ -70,21 +70,16 @@ main(int argc, char **argv)
             {
                 Group8Decode(&DecodedInst);
             } break;
-
-#if 0
             case 9:
             {
                 Group9Decode(&DecodedInst);
             } break;
-#endif            
             default:
             {
                 // Error
                 Debug_OutputErrorMessage("Failed to dispatch in switch statement in main");
                 exit(1);
-            }
-
-
+            } break;
         }
 
         Debug_PrintCurrentStatus(&DecodedInst, IStream.Idx);
