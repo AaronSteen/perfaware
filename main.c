@@ -23,7 +23,7 @@ main(int argc, char **argv)
         DecodedInst.OpcodeEnum = ByteOneToOpcodeEnumLUT[DecodedInst.Binary[0]];
         if(DecodedInst.OpcodeEnum == EXTENDED)
         {
-            DecodedInst.OpcodeEnum = ReadExtendedOpcode(&DecodedInst);
+            ReadExtendedOpcode(&DecodedInst);
         }
         DecodedInst.Mnemonic = OpcodeEnumToStringLUT[DecodedInst.OpcodeEnum];
 

@@ -590,9 +590,54 @@ IsThisALabelInstruction(u8 OpcodeEnum)
 }
 
 void
+DirectAddressMovDecode(struct decoded_inst *DecodedInst)
+{
+    struct parsed_inst ParsedInst = {0};
+    char DirectAddress[MAX_STRING_LEN] = {0};
+    char Reg[MAX_STRING_LEN] = {0};
+    u8 ByteOne = DecodedInst->Binary[0];
+    ParsedInst.IsWord = (bool)(ByteOne & 0x01);
+
+    bool IsWrite = (bool)((ByteOne & 0x02) >> 1);
+
+    DecodedInst->Size = 3;
+
+    if(ParsedInst.IsWord)
+    {
+        strncpy(Reg, "ax", 2);
+    }
+    else
+    {
+        strncpy(Reg, "al", 2);
+    }
+
+    u16 DirectAddressBytes = *(u16 *)(DecodedInst->Binary + 1);
+    strncat(DirectAddress, "[", MAX_STRING_LEN);
+    bool IsSigned = false;
+    GetIntAsString_16(DirectAddressBytes, DirectAddress, IsSigned);
+    strncat(DirectAddress, "]", MAX_STRING_LEN);
+
+    if(IsWrite)
+    {
+        strncpy(DecodedInst->OperandOne, DirectAddress, MAX_STRING_LEN);
+        strncpy(DecodedInst->OperandTwo, Reg, MAX_STRING_LEN);
+    }
+    else
+    {
+        strncpy(DecodedInst->OperandOne, Reg, MAX_STRING_LEN);
+        strncpy(DecodedInst->OperandTwo, DirectAddress, MAX_STRING_LEN);
+    }
+
+}
+
+void
 Group9Decode(struct decoded_inst *DecodedInst)
 {
-    if( (DecodedInst->OpcodeEnum == IN_) || (DecodedInst->OpcodeEnum == OUT_) )
+    if(DecodedInst->OpcodeEnum == MOV)
+    {
+        DirectAddressMovDecode(DecodedInst);
+    }
+    else if( (DecodedInst->OpcodeEnum == IN_) || (DecodedInst->OpcodeEnum == OUT_) )
     {
         InOutDecode(DecodedInst);
     }
@@ -975,7 +1020,11 @@ Group1Decode(struct decoded_inst *DecodedInst)
     ReadRorMField(&ParsedInst, RorMField);
     
     DecodedInst->Size = 2;
-    if(ParsedInst.Mod == MEM_MODE_DISP_8)
+    if( (ParsedInst.Mod == MEM_MODE_NO_DISP) && (ParsedInst.RorM == DIRECT_ADDRESS) )
+    {
+        DecodedInst->Size = 4;
+    }
+    else if(ParsedInst.Mod == MEM_MODE_DISP_8)
     {
         DecodedInst->Size += 1;
     }
@@ -998,7 +1047,7 @@ Group1Decode(struct decoded_inst *DecodedInst)
 
 
 
-u8
+void
 ReadExtendedOpcode(struct decoded_inst *DecodedInst)
 {
     u8 FirstByte = DecodedInst->Binary[0];
@@ -1010,46 +1059,47 @@ ReadExtendedOpcode(struct decoded_inst *DecodedInst)
         case 0x80:
         case 0x81:
             {
+                DecodedInst->DecodeGroup = 1
                 switch(IHaveMetTheDistinguisher)
                 {
                     case 0x00: // 000
                         {
-                            return(ADD);
+                            DecodedInst->OpcodeEnum = ADD;
                         } break;
 
                     case 0x08: // 001
                         {
-                            return(OR);
+                            DecodedInst->OpcodeEnum = OR;
                         } break;
 
                     case 0x10: // 010
                         {
-                            return(ADC);
+                            DecodedInst->OpcodeEnum = ADC;
                         } break;
 
                     case 0x18: // 011
                         {
-                            return(SBB);
+                            DecodedInst->OpcodeEnum = SBB;
                         } break;
 
                     case 0x20: // 100
                         {
-                            return(AND);
+                            DecodedInst->OpcodeEnum = AND;
                         } break;
 
                     case 0x28: // 101
                         {
-                            return(SUB);
+                            DecodedInst->OpcodeEnum = SUB;
                         } break;
 
                     case 0x30: // 110
                         {
-                            return(XOR);
+                            DecodedInst->OpcodeEnum = XOR;
                         } break;
 
                     case 0x38: // 111
                         {
-                            return(CMP);
+                            DecodedInst->OpcodeEnum = CMP;
                         } break;
 
                     default:
@@ -1066,27 +1116,27 @@ ReadExtendedOpcode(struct decoded_inst *DecodedInst)
                 {
                     case 0x00: // 000
                         {
-                            return(ADD);
+                            DecodedInst->OpcodeEnum = ADD;
                         } break;
 
                     case 0x10: // 010
                         {
-                            return(ADC);
+                            DecodedInst->OpcodeEnum = ADC;
                         } break;
 
                     case 0x18: // 011
                         {
-                            return(SBB);
+                            DecodedInst->OpcodeEnum = SBB;
                         } break;
 
                     case 0x28: // 101
                         {
-                            return(SUB);
+                            DecodedInst->OpcodeEnum = SUB;
                         } break;
 
                     case 0x38: // 111
                         {
-                            return(CMP);
+                            DecodedInst->OpcodeEnum = CMP;
                         } break;
 
                     default:
@@ -1103,27 +1153,27 @@ ReadExtendedOpcode(struct decoded_inst *DecodedInst)
                 {
                     case 0x00: // 000
                         {
-                            return(ADD);
+                            DecodedInst->OpcodeEnum = ADD;
                         } break;
 
                     case 0x10: // 010
                         {
-                            return(ADC);
+                            DecodedInst->OpcodeEnum = ADC;
                         } break;
 
                     case 0x18: // 011
                         {
-                            return(SBB);
+                            DecodedInst->OpcodeEnum = SBB;
                         } break;
 
                     case 0x28: // 101
                         {
-                            return(SUB);
+                            DecodedInst->OpcodeEnum = SUB;
                         } break;
 
                     case 0x38: // 111
                         {
-                            return(CMP);
+                            DecodedInst->OpcodeEnum = CMP;
                         } break;
 
                     default:
@@ -1143,37 +1193,37 @@ ReadExtendedOpcode(struct decoded_inst *DecodedInst)
                 {
                     case 0x00: // 000
                         {
-                            return(ROL);
+                            DecodedInst->OpcodeEnum = ROL;
                         } break;
 
                     case 0x08: // 001
                         {
-                            return(ROR);
+                            DecodedInst->OpcodeEnum = ROR;
                         } break;
 
                     case 0x10: // 010
                         {
-                            return(RCL);
+                            DecodedInst->OpcodeEnum = RCL;
                         } break;
 
                     case 0x18: // 011
                         {
-                            return(RCR);
+                            DecodedInst->OpcodeEnum = RCR;
                         } break;
 
                     case 0x20: // 100
                         {
-                            return(SHL);
+                            DecodedInst->OpcodeEnum = SHL;
                         } break;
 
                     case 0x28: // 101
                         {
-                            return(SHR);
+                            DecodedInst->OpcodeEnum = SHR;
                         } break;
 
                     case 0x38: // 111
                         {
-                            return(SAR);
+                            DecodedInst->OpcodeEnum = SAR;
                         } break;
 
                     default:
@@ -1191,37 +1241,37 @@ ReadExtendedOpcode(struct decoded_inst *DecodedInst)
                 {
                     case 0x00: // 000
                         {
-                            return(TEST);
+                            DecodedInst->OpcodeEnum = TEST;
                         } break;
 
                     case 0x10: // 010
                         {
-                            return(NOT);
+                            DecodedInst->OpcodeEnum = NOT;
                         } break;
 
                     case 0x18: // 011
                         {
-                            return(NEG);
+                            DecodedInst->OpcodeEnum = NEG;
                         } break;
 
                     case 0x20: // 100
                         {
-                            return(MUL);
+                            DecodedInst->OpcodeEnum = MUL;
                         } break;
 
                     case 0x28: // 101
                         {
-                            return(IMUL);
+                            DecodedInst->OpcodeEnum = IMUL;
                         } break;
 
                     case 0x30: // 110
                         {
-                            return(DIV);
+                            DecodedInst->OpcodeEnum = DIV;
                         } break;
 
                     case 0x38: // 111
                         {
-                            return(IDIV);
+                            DecodedInst->OpcodeEnum = IDIV;
                         } break;
 
                     default:
@@ -1238,12 +1288,12 @@ ReadExtendedOpcode(struct decoded_inst *DecodedInst)
                 {
                     case 0x00: // 000
                         {
-                            return(INC);
+                            DecodedInst->OpcodeEnum = INC;
                         } break;
 
                     case 0x08: // 010
                         {
-                            return(DEC);
+                            DecodedInst->OpcodeEnum = DEC;
                         } break;
 
                     default:
@@ -1260,29 +1310,29 @@ ReadExtendedOpcode(struct decoded_inst *DecodedInst)
                 {
                     case 0x00: // 000
                         {
-                            return(INC);
+                            DecodedInst->OpcodeEnum = INC;
                         } break;
 
                     case 0x08: // 001
                         {
-                            return(DEC);
+                            DecodedInst->OpcodeEnum = DEC;
                         } break;
 
                     case 0x10: // 010
                     case 0x18: // 011
                         {
-                            return(CALL);
+                            DecodedInst->OpcodeEnum = CALL;
                         } break;
 
                     case 0x20: // 100
                     case 0x28: // 101
                         {
-                            return(JMP);
+                            DecodedInst->OpcodeEnum = JMP;
                         } break;
 
                     case 0x30: // 110
                         {
-                            return(PUSH);
+                            DecodedInst->OpcodeEnum = PUSH;
                         } break;
 
                     default:
