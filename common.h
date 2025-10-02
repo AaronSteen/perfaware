@@ -36,6 +36,16 @@ struct istream
     int Idx;
 };
 
+extern struct istream IStream;
+extern char *MnemonicLUT[];
+extern char *ByteRegLUT[];
+extern char *WordRegLUT[];
+extern char *SegRegLUT[];
+extern char *EffectiveAddressLUT[];
+extern u8 ByteOneToOpcodeEnumLUT[];
+extern char *OpcodeEnumToStringLUT[];
+extern u8 OpcodeLUT[];
+
 struct decoded_inst
 {
     u8 *Binary;
@@ -205,7 +215,7 @@ u8 ByteOneToDecodeGroupLUT[256] =
     /*78*/ G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,
 
     /*80*/ G2_IMM_RM,   G2_IMM_RM,   G2_IMM_RM,   G2_IMM_RM,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG, 
-    /*88*/ G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G3_UNARY_RM,
+    /*88*/ G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G9_MISC,   G1_RM_REG,   G3_UNARY_RM,
 
     /*90*/ G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA, G5_OPREG_NODATA,
     /*98*/ G7_ONEBYTE,  G7_ONEBYTE,  G9_MISC,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE,  G7_ONEBYTE, 
@@ -216,7 +226,7 @@ u8 ByteOneToDecodeGroupLUT[256] =
     /*B0*/ G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM,
     /*B8*/ G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM, G6_OPREG_IMM,
 
-    /*C0*/ G7_ONEBYTE,  G7_ONEBYTE,  G9_MISC,  G7_ONEBYTE,  G1_RM_REG,   G1_RM_REG,   G2_IMM_RM,   G2_IMM_RM,     
+    /*C0*/ G7_ONEBYTE,  G7_ONEBYTE,  G9_MISC,  G7_ONEBYTE,  G9_MISC,   G9_MISC,   G2_IMM_RM,   G2_IMM_RM,     
     /*C8*/ G7_ONEBYTE,  G7_ONEBYTE,  G9_MISC,  G7_ONEBYTE,  G7_ONEBYTE,  G9_MISC,  G7_ONEBYTE,    G7_ONEBYTE,       
 
     /*D0*/ G8_SHIFT,    G8_SHIFT,    G8_SHIFT, G8_SHIFT, G7_ONEBYTE, G7_ONEBYTE, G7_ONEBYTE, G7_ONEBYTE,

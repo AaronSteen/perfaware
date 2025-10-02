@@ -25,9 +25,11 @@ main(int argc, char **argv)
         {
             ReadExtendedOpcode(&DecodedInst);
         }
+        else
+        {
+            DecodedInst.DecodeGroup = ByteOneToDecodeGroupLUT[DecodedInst.Binary[0]];
+        }
         DecodedInst.Mnemonic = OpcodeEnumToStringLUT[DecodedInst.OpcodeEnum];
-
-        DecodedInst.DecodeGroup = ByteOneToDecodeGroupLUT[DecodedInst.Binary[0]];
 
         switch(DecodedInst.DecodeGroup)
         {

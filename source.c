@@ -4,14 +4,6 @@ char *EffectiveAddressLUT[] = { "[bx + si", "[bx + di",  "[bp + si", "[bp + di",
 char *ByteRegLUT[] = {"al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"};
 char *WordRegLUT[] = {"ax", "cx", "dx", "bx", "sp", "bp", "si", "di"};
 char *SegRegLUT[] = {"es", "cs", "ss", "ds"};
-extern char *MnemonicLUT[];
-extern char *ByteRegLUT[];
-extern char *WordRegLUT[];
-extern char *SegRegLUT[];
-extern char *EffectiveAddressLUT[];
-extern u8 ByteOneToOpcodeEnumLUT[];
-extern char *OpcodeEnumToStringLUT[];
-extern u8 OpcodeLUT[];
 
 void
 __Debug_OutputErrorMessage(char *ErrorMessage, const char *CallingFunction, int Line)
@@ -30,7 +22,7 @@ Debug_PrintBinary(u8 Value)
 {
     for(int i = 0; i < 8; i++)
     {
-        int ShiftAmt = (7 - i);
+       int ShiftAmt = (7 - i);
         u8 Digit = ((Value >> ShiftAmt) & 1);
         if(Digit)
         {
@@ -630,6 +622,52 @@ DirectAddressMovDecode(struct decoded_inst *DecodedInst)
 
 }
 
+// G1_RM_REG = 1,   // [.... ..dw] [mod reg r/m] [disp-lo] [disp-hi]
+void
+Group1Decode(struct decoded_inst *DecodedInst)
+{
+    struct parsed_inst ParsedInst = {0};
+    char RegField[MAX_STRING_LEN] = {0};
+    char RorMField[MAX_STRING_LEN] = {0};
+    u8 ByteOne = DecodedInst->Binary[0];
+    u8 ByteTwo = DecodedInst->Binary[1];
+
+    ParsedInst.Binary = DecodedInst->Binary;
+    ParsedInst.DestFlag = (bool)((ByteOne & 0x02) >> 1);
+    ParsedInst.IsWord = (bool)(ByteOne & 0x01);
+    ParsedInst.Mod = ((ByteTwo & MOD_FIELD) >> 6);
+    ParsedInst.Reg = ((ByteTwo & FLEX_FIELD) >> 3);
+    ParsedInst.RorM = (ByteTwo & R_OR_M_FIELD);
+
+    LookUpReg(&ParsedInst, RegField);
+    ReadRorMField(&ParsedInst, RorMField);
+    
+    DecodedInst->Size = 2;
+    if( (ParsedInst.Mod == MEM_MODE_NO_DISP) && (ParsedInst.RorM == DIRECT_ADDRESS) )
+    {
+        DecodedInst->Size = 4;
+    }
+    else if(ParsedInst.Mod == MEM_MODE_DISP_8)
+    {
+        DecodedInst->Size += 1;
+    }
+    else if(ParsedInst.Mod == MEM_MODE_DISP_16)
+    {
+        DecodedInst->Size += 2;
+    }
+
+    if(ParsedInst.DestFlag)
+    {
+        strncpy(DecodedInst->OperandOne, RegField, strlen(RegField));
+        strncpy(DecodedInst->OperandTwo, RorMField, strlen(RorMField));
+    }
+    else
+    {
+        strncpy(DecodedInst->OperandOne, RorMField, strlen(RorMField));
+        strncpy(DecodedInst->OperandTwo, RegField, strlen(RegField));
+    }
+}
+
 void
 Group9Decode(struct decoded_inst *DecodedInst)
 {
@@ -665,6 +703,24 @@ Group9Decode(struct decoded_inst *DecodedInst)
         DecodedInst->Size = 2;
         bool IsSigned = false;
         GetIntAsString_8(DecodedInst->Binary[1], DecodedInst->OperandOne, IsSigned);
+    }
+    else if( (DecodedInst->OpcodeEnum == LEA) || (DecodedInst->OpcodeEnum == LDS) )
+    {
+        Group1Decode(DecodedInst);
+        char Temp[MAX_STRING_LEN] = {0};
+        strncpy(Temp, DecodedInst->OperandOne, MAX_STRING_LEN);
+        strncpy(DecodedInst->OperandOne, DecodedInst->OperandTwo, MAX_STRING_LEN);
+        strncpy(DecodedInst->OperandTwo, Temp, MAX_STRING_LEN);
+    }
+    else if(DecodedInst->OpcodeEnum == LES)
+    {
+        Group1Decode(DecodedInst);
+        int RegCode = ( ((DecodedInst->Binary[1]) & FLEX_FIELD) >> 3 );
+        strncpy(DecodedInst->OperandTwo, WordRegLUT[RegCode], MAX_STRING_LEN);
+        char Temp[MAX_STRING_LEN] = {0};
+        strncpy(Temp, DecodedInst->OperandOne, MAX_STRING_LEN);
+        strncpy(DecodedInst->OperandOne, DecodedInst->OperandTwo, MAX_STRING_LEN);
+        strncpy(DecodedInst->OperandTwo, Temp, MAX_STRING_LEN);
     }
     else
     {
@@ -933,7 +989,14 @@ Group3Decode(struct decoded_inst *DecodedInst)
         {
             strncat(RorMField, "byte ", 5);
         }
-        if(ParsedInst.Mod == MEM_MODE_DISP_8)
+
+        if( (ParsedInst.Mod == MEM_MODE_NO_DISP) && (ParsedInst.RorM == 0x06) )
+        {
+            // Direct address
+            DecodedInst->Size = 4;
+        }
+
+        else if(ParsedInst.Mod == MEM_MODE_DISP_8)
         {
             DecodedInst->Size += 1;
         }
@@ -999,51 +1062,6 @@ Group2Decode(struct decoded_inst *DecodedInst)
     strncpy( DecodedInst->OperandTwo, ImmField, (MAX_STRING_LEN - strlen(ImmField)) );
 }
 
-// G1_RM_REG = 1,   // [.... ..dw] [mod reg r/m] [disp-lo] [disp-hi]
-void
-Group1Decode(struct decoded_inst *DecodedInst)
-{
-    struct parsed_inst ParsedInst = {0};
-    char RegField[MAX_STRING_LEN] = {0};
-    char RorMField[MAX_STRING_LEN] = {0};
-    u8 ByteOne = DecodedInst->Binary[0];
-    u8 ByteTwo = DecodedInst->Binary[1];
-
-    ParsedInst.Binary = DecodedInst->Binary;
-    ParsedInst.DestFlag = (bool)((ByteOne & 0x02) >> 1);
-    ParsedInst.IsWord = (bool)(ByteOne & 0x01);
-    ParsedInst.Mod = ((ByteTwo & MOD_FIELD) >> 6);
-    ParsedInst.Reg = ((ByteTwo & FLEX_FIELD) >> 3);
-    ParsedInst.RorM = (ByteTwo & R_OR_M_FIELD);
-
-    LookUpReg(&ParsedInst, RegField);
-    ReadRorMField(&ParsedInst, RorMField);
-    
-    DecodedInst->Size = 2;
-    if( (ParsedInst.Mod == MEM_MODE_NO_DISP) && (ParsedInst.RorM == DIRECT_ADDRESS) )
-    {
-        DecodedInst->Size = 4;
-    }
-    else if(ParsedInst.Mod == MEM_MODE_DISP_8)
-    {
-        DecodedInst->Size += 1;
-    }
-    else if(ParsedInst.Mod == MEM_MODE_DISP_16)
-    {
-        DecodedInst->Size += 2;
-    }
-
-    if(ParsedInst.DestFlag)
-    {
-        strncpy(DecodedInst->OperandOne, RegField, strlen(RegField));
-        strncpy(DecodedInst->OperandTwo, RorMField, strlen(RorMField));
-    }
-    else
-    {
-        strncpy(DecodedInst->OperandOne, RorMField, strlen(RorMField));
-        strncpy(DecodedInst->OperandTwo, RegField, strlen(RegField));
-    }
-}
 
 
 
@@ -1058,296 +1076,233 @@ ReadExtendedOpcode(struct decoded_inst *DecodedInst)
     {
         case 0x80:
         case 0x81:
-            {
-                DecodedInst->DecodeGroup = 1
-                switch(IHaveMetTheDistinguisher)
-                {
-                    case 0x00: // 000
-                        {
-                            DecodedInst->OpcodeEnum = ADD;
-                        } break;
-
-                    case 0x08: // 001
-                        {
-                            DecodedInst->OpcodeEnum = OR;
-                        } break;
-
-                    case 0x10: // 010
-                        {
-                            DecodedInst->OpcodeEnum = ADC;
-                        } break;
-
-                    case 0x18: // 011
-                        {
-                            DecodedInst->OpcodeEnum = SBB;
-                        } break;
-
-                    case 0x20: // 100
-                        {
-                            DecodedInst->OpcodeEnum = AND;
-                        } break;
-
-                    case 0x28: // 101
-                        {
-                            DecodedInst->OpcodeEnum = SUB;
-                        } break;
-
-                    case 0x30: // 110
-                        {
-                            DecodedInst->OpcodeEnum = XOR;
-                        } break;
-
-                    case 0x38: // 111
-                        {
-                            DecodedInst->OpcodeEnum = CMP;
-                        } break;
-
-                    default:
-                        {
-                            Debug_OutputErrorMessage("Failed to decode extended opcode 0x80 or 0x81:\n    ADD, OR, ADC, SBB, AND, SUB, XOR, or CMP");
-                            exit(1);
-                        } break;
-                }
-            } break;
-
         case 0x82:
-            {
-                switch(IHaveMetTheDistinguisher)
-                {
-                    case 0x00: // 000
-                        {
-                            DecodedInst->OpcodeEnum = ADD;
-                        } break;
-
-                    case 0x10: // 010
-                        {
-                            DecodedInst->OpcodeEnum = ADC;
-                        } break;
-
-                    case 0x18: // 011
-                        {
-                            DecodedInst->OpcodeEnum = SBB;
-                        } break;
-
-                    case 0x28: // 101
-                        {
-                            DecodedInst->OpcodeEnum = SUB;
-                        } break;
-
-                    case 0x38: // 111
-                        {
-                            DecodedInst->OpcodeEnum = CMP;
-                        } break;
-
-                    default:
-                        {
-                            Debug_OutputErrorMessage("Failed to decode extended opcode 0x82:\n    ADD, ADC, SBB, SUB or CMP");
-                            exit(1);
-                        } break;
-                }
-            } break;
-
         case 0x83:
+        {
+            DecodedInst->DecodeGroup = G2_IMM_RM;
+            switch(IHaveMetTheDistinguisher)
             {
-                switch(IHaveMetTheDistinguisher)
+                case 0x00: // 000
                 {
-                    case 0x00: // 000
-                        {
-                            DecodedInst->OpcodeEnum = ADD;
-                        } break;
+                    DecodedInst->OpcodeEnum = ADD;
+                } break;
 
-                    case 0x10: // 010
-                        {
-                            DecodedInst->OpcodeEnum = ADC;
-                        } break;
+                case 0x08: // 001
+                {
+                    DecodedInst->OpcodeEnum = OR;
+                } break;
 
-                    case 0x18: // 011
-                        {
-                            DecodedInst->OpcodeEnum = SBB;
-                        } break;
+                case 0x10: // 010
+                {
+                    DecodedInst->OpcodeEnum = ADC;
+                } break;
 
-                    case 0x28: // 101
-                        {
-                            DecodedInst->OpcodeEnum = SUB;
-                        } break;
+                case 0x18: // 011
+                {
+                    DecodedInst->OpcodeEnum = SBB;
+                } break;
 
-                    case 0x38: // 111
-                        {
-                            DecodedInst->OpcodeEnum = CMP;
-                        } break;
+                case 0x20: // 100
+                {
+                    DecodedInst->OpcodeEnum = AND;
+                } break;
 
-                    default:
-                        {
-                            Debug_OutputErrorMessage("Failed to decode extended opcode 0x83:\n    ADD, ADC, SBB, SUB or CMP");
-                            exit(1);
-                        } break;
-                }
-            } break;
+                case 0x28: // 101
+                {
+                    DecodedInst->OpcodeEnum = SUB;
+                } break;
+
+                case 0x30: // 110
+                {
+                    DecodedInst->OpcodeEnum = XOR;
+                } break;
+
+                case 0x38: // 111
+                {
+                    DecodedInst->OpcodeEnum = CMP;
+                } break;
+
+                default:
+                {
+                    Debug_OutputErrorMessage("Failed to decode extended opcode 0x80, 0x81, 0x82, 0x83:\n \
+                            ADD, OR, ADC, SBB, AND, SUB, XOR, or CMP");
+                    exit(1);
+                } break;
+            }
+        } break;
 
         case 0xD0:
         case 0xD1:
         case 0xD2:
         case 0xD3:
+        {
+            DecodedInst->DecodeGroup = G8_SHIFT;
+            switch(IHaveMetTheDistinguisher)
             {
-                switch(IHaveMetTheDistinguisher)
+                case 0x00: // 000
                 {
-                    case 0x00: // 000
-                        {
-                            DecodedInst->OpcodeEnum = ROL;
-                        } break;
+                    DecodedInst->OpcodeEnum = ROL;
+                } break;
 
-                    case 0x08: // 001
-                        {
-                            DecodedInst->OpcodeEnum = ROR;
-                        } break;
+                case 0x08: // 001
+                {
+                    DecodedInst->OpcodeEnum = ROR;
+                } break;
 
-                    case 0x10: // 010
-                        {
-                            DecodedInst->OpcodeEnum = RCL;
-                        } break;
+                case 0x10: // 010
+                {
+                    DecodedInst->OpcodeEnum = RCL;
+                } break;
 
-                    case 0x18: // 011
-                        {
-                            DecodedInst->OpcodeEnum = RCR;
-                        } break;
+                case 0x18: // 011
+                {
+                    DecodedInst->OpcodeEnum = RCR;
+                } break;
 
-                    case 0x20: // 100
-                        {
-                            DecodedInst->OpcodeEnum = SHL;
-                        } break;
+                case 0x20: // 100
+                {
+                    DecodedInst->OpcodeEnum = SHL;
+                } break;
 
-                    case 0x28: // 101
-                        {
-                            DecodedInst->OpcodeEnum = SHR;
-                        } break;
+                case 0x28: // 101
+                {
+                    DecodedInst->OpcodeEnum = SHR;
+                } break;
 
-                    case 0x38: // 111
-                        {
-                            DecodedInst->OpcodeEnum = SAR;
-                        } break;
+                case 0x38: // 111
+                {
+                    DecodedInst->OpcodeEnum = SAR;
+                } break;
 
-                    default:
-                        {
-                            Debug_OutputErrorMessage("Failed to decode extended opcode 0xD0, 0xD1, 0xD2, 0xD3:\n    ROL, ROR, RCL, RCR, TBD_SHL, SHR, or SAR");
-                            exit(1);
-                        } break;
-                }
-            } break;
+                default:
+                {
+                    Debug_OutputErrorMessage("Failed to decode extended opcode 0xD0, 0xD1, 0xD2, 0xD3:\n    ROL, ROR, RCL, RCR, TBD_SHL, SHR, or SAR");
+                    exit(1);
+                } break;
+            }
+        } break;
 
         case 0xF6:
         case 0xF7:
+        {
+            DecodedInst->DecodeGroup = G2_IMM_RM;
+            switch(IHaveMetTheDistinguisher)
             {
-                switch(IHaveMetTheDistinguisher)
+                case 0x00: // 000
                 {
-                    case 0x00: // 000
-                        {
-                            DecodedInst->OpcodeEnum = TEST;
-                        } break;
+                    DecodedInst->OpcodeEnum = TEST;
+                } break;
 
-                    case 0x10: // 010
-                        {
-                            DecodedInst->OpcodeEnum = NOT;
-                        } break;
+                case 0x10: // 010
+                {
+                    DecodedInst->OpcodeEnum = NOT;
+                } break;
 
-                    case 0x18: // 011
-                        {
-                            DecodedInst->OpcodeEnum = NEG;
-                        } break;
+                case 0x18: // 011
+                {
+                    DecodedInst->OpcodeEnum = NEG;
+                } break;
 
-                    case 0x20: // 100
-                        {
-                            DecodedInst->OpcodeEnum = MUL;
-                        } break;
+                case 0x20: // 100
+                {
+                    DecodedInst->OpcodeEnum = MUL;
+                } break;
 
-                    case 0x28: // 101
-                        {
-                            DecodedInst->OpcodeEnum = IMUL;
-                        } break;
+                case 0x28: // 101
+                {
+                    DecodedInst->OpcodeEnum = IMUL;
+                } break;
 
-                    case 0x30: // 110
-                        {
-                            DecodedInst->OpcodeEnum = DIV;
-                        } break;
+                case 0x30: // 110
+                {
+                    DecodedInst->OpcodeEnum = DIV;
+                } break;
 
-                    case 0x38: // 111
-                        {
-                            DecodedInst->OpcodeEnum = IDIV;
-                        } break;
+                case 0x38: // 111
+                {
+                    DecodedInst->OpcodeEnum = IDIV;
+            } break;
 
-                    default:
-                        { 
-                            Debug_OutputErrorMessage("Failed to decode extended opcode 0xF6 or 0xF7:\n   TEST, NOT, NEG, MUL, IMUL, DIV or IDIV"); 
-                            exit(1);
-                        }
-                }
+            default:
+            { 
+                    Debug_OutputErrorMessage("Failed to decode extended opcode 0xF6 or 0xF7:\n   TEST, NOT, NEG, MUL, IMUL, DIV or IDIV"); 
+                    exit(1);
+                } break;
             }
+        } break;
 
         case 0xFE:
+        {
+            DecodedInst->DecodeGroup = G3_UNARY_RM;
+            switch(IHaveMetTheDistinguisher)
             {
-                switch(IHaveMetTheDistinguisher)
+                case 0x00: // 000
                 {
-                    case 0x00: // 000
-                        {
-                            DecodedInst->OpcodeEnum = INC;
-                        } break;
+                    DecodedInst->OpcodeEnum = INC;
+                } break;
 
-                    case 0x08: // 010
-                        {
-                            DecodedInst->OpcodeEnum = DEC;
-                        } break;
+                case 0x08: // 010
+                {
+                    DecodedInst->OpcodeEnum = DEC;
+                } break;
 
-                    default:
-                        {
-                            Debug_OutputErrorMessage("Failed to decode extended opcode 0xFE:\n   INC or DEC"); 
-                            exit(1);
-                        } break;
-                }
-            } break;
+                default:
+                {
+                    Debug_OutputErrorMessage("Failed to decode extended opcode 0xFE:\n   INC or DEC"); 
+                    exit(1);
+                } break;
+            }
+        } break;
 
         case 0xFF:
+        {
+            switch(IHaveMetTheDistinguisher)
             {
-                switch(IHaveMetTheDistinguisher)
+                case 0x00: // 000
                 {
-                    case 0x00: // 000
-                        {
-                            DecodedInst->OpcodeEnum = INC;
-                        } break;
+                    DecodedInst->OpcodeEnum = INC;
+                    DecodedInst->DecodeGroup = G3_UNARY_RM;
+                } break;
 
-                    case 0x08: // 001
-                        {
-                            DecodedInst->OpcodeEnum = DEC;
-                        } break;
+                case 0x08: // 001
+                {
+                    DecodedInst->OpcodeEnum = DEC;
+                    DecodedInst->DecodeGroup = G3_UNARY_RM;
+                } break;
 
-                    case 0x10: // 010
-                    case 0x18: // 011
-                        {
-                            DecodedInst->OpcodeEnum = CALL;
-                        } break;
+                case 0x10: // 010
+                case 0x18: // 011
+                {
+                    DecodedInst->OpcodeEnum = CALL;
+                    DecodedInst->DecodeGroup = G9_MISC;
+                } break;
 
-                    case 0x20: // 100
-                    case 0x28: // 101
-                        {
-                            DecodedInst->OpcodeEnum = JMP;
-                        } break;
+                case 0x20: // 100
+                case 0x28: // 101
+                {
+                    DecodedInst->OpcodeEnum = JMP;
+                    DecodedInst->DecodeGroup = G9_MISC;
+                } break;
 
-                    case 0x30: // 110
-                        {
-                            DecodedInst->OpcodeEnum = PUSH;
-                        } break;
+                case 0x30: // 110
+                {
+                    DecodedInst->OpcodeEnum = PUSH;
+                    DecodedInst->DecodeGroup = G3_UNARY_RM;
+                } break;
 
-                    default:
-                        {
-                            Debug_OutputErrorMessage("Failed to decode extended opcode 0xFF:\n   INC, DEC, CALL, JMP or PUSH"); 
-                            exit(1);
-                        } break;
-                }
-            } break;
+                default:
+                {
+                    Debug_OutputErrorMessage("Failed to decode extended opcode 0xFF:\n   INC, DEC, CALL, JMP or PUSH"); 
+                    exit(1);
+                } break;
+            }
+        } break;
 
         default:
-            {
-                Debug_OutputErrorMessage("Failed to decode extended opcode");
-                exit(1);
-            } break;
+        {
+            Debug_OutputErrorMessage("Failed to decode extended opcode");
+            exit(1);
+        } break;
     }
 }
 
