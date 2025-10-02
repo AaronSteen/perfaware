@@ -1,6 +1,8 @@
 #include "common.h"
 #include "source.c"
 
+struct inst_stream InstStream;
+
 int 
 main(int argc, char **argv)
 {
@@ -12,10 +14,10 @@ main(int argc, char **argv)
 
     LPCSTR FilePath = argv[1]; 
     HANDLE FileHandle = Win32_OpenFile(FilePath); 
-    struct istream IStream = Win32_LoadIStream(FileHandle);
-    u8 *IP = IStream.Start;
+    InstStream = Win32_LoadInstStream(FileHandle);
+    u8 *IP = InstStream.Start;
 
-    while(IP < IStream.DoNotCrossThisLine)
+    while(IP < InstStream.DoNotCrossThisLine)
     {
         struct decoded_inst DecodedInst = {0};
         DecodedInst.Binary = IP;
@@ -84,10 +86,10 @@ main(int argc, char **argv)
             } break;
         }
 
-        Debug_PrintCurrentStatus(&DecodedInst, IStream.Idx);
+        Debug_PrintCurrentStatus(&DecodedInst, InstStream.Idx);
 
         IP += DecodedInst.Size;
-        ++IStream.Idx;
+        ++InstStream.Idx;
     }
 
     return(0);
