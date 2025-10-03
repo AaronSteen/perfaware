@@ -1213,6 +1213,19 @@ Group3Decode(struct decoded_inst *DecodedInst)
 
 }
 
+// if arithmetic:
+//
+//     2 bytes for instruction: [opcode sw] [mod <type> r/m] 
+//
+//     2 potential disp bytes if writing the immediate value to memory: [disp-lo] [disp-hi]
+//
+//     2 potential data bytes [data] [data] determined by the following:
+//         - if SW == 00, only 1 data byte because it's an 8-bit value; nothing else to it
+//         - if SW == 01, 2 data bytes because it's a 16-bit value; nothing else to it
+//         - if SW == 10, invalid
+//         - if SW == 11, only 1 data byte but the stored value should be 2 bytes because we take the
+//                         8-bit value and sign-extend it to 16 bits before storing it in the
+//                         extended (bx etc.) register
 void
 Group2Decode(struct decoded_inst *DecodedInst)
 {
@@ -1255,7 +1268,75 @@ Group2Decode(struct decoded_inst *DecodedInst)
         ImmBits += 2;
     }
 
-    bool CareAboutSignExtend = CheckIfArithmetic(DecodedInst->OpcodeEnum);
+    bool CareAboutSignExtend;
+    if ( (CareAboutSignExtend = CheckIfArithmetic(DecodedInst->OpcodeEnum)) )
+    {
+        // About sign extension (the S flag) and word instructions (the W flag).
+        //
+        //      The W flag determines the width of the LOCATION into which a value
+        //      is written.
+        //      
+        //      The S flag determines the width of the VALUE that is written there.
+        //
+        //      Only add, adc, sub, sbb and cmp instructions have an S flag. In
+        //              the case of these instructions, if the W flag is set,
+        //              we need to check the S flag to see whether the 
+        //              immediate value encoded in the instruction is 16 bits
+        //              or 8 bits.
+        //
+        //      If the S flag IS NOT set, it means the immediate value is 16 bits
+        //              (what we would describe as "the typical case"; i.e., 
+        //              the encoding approach doesn't differ from other immediate instructions)
+        //
+        //      If the S flag IS set, it means the immediate value is 8 bits, but
+        //              should be sign-extended; i.e., it should be stored in an s16 variable
+        //              before being written to its 16-bit destination
+        //      
+        //      The switch statement below is unnecessary because the only case in which we
+        //              change the codepath is in the case where S = 0 and W = 1, so we could
+        //              use a single if statement instead. However, presenting it in this way makes
+        //              the relationship between the S and W flags clear, and performance
+        //              isn't a concern for this project right now, so we leave it in for the moment.
+        //      
+        u8 SWBits = (ByteOne & 0x03);
+        switch(SWBits)
+        {
+            case 0x00: // binary 0000 0000
+            {
+                // 8-bit immediate value, which we already account for at the top of
+                //      the function by setting the instruction size to 3,
+                //      written into a destination whose width is 8-bits
+                DecodedInst->Size += 0;
+            } break;
+
+            case 0x01: // binary 0000 0001
+            {
+                // 16-bit immediate value (instead of 8-bit immediate value above), to be
+                //      written to a destination with a width of 16-bits
+                DecodedInst->Size += 1;
+            } break;
+
+            case 0x03: // binary 0000 0011
+            {
+                // 8-bit immediate value stored in the instruction that must be
+                //      sign-extended when written to the destination. As with case
+                //      0x00, we already account for this at the start of the function
+                DecodedInst->Size += 0;
+            } break;
+
+            default:
+            {
+                // We'd hit this block if the S bit was set and the W bit was not, which is
+                //      nonsensical: we wouldn't sign extend a value to be 16 bits if 
+                //      we were writing it into an 8-bit register.
+                Debug_OutputErrorMessage("Invalid SW bits combination for arithmetic instruction");
+                exit(1);
+
+            } break;
+        }
+        
+
+    }
     bool IsSigned = true;
     ReadImmField(&ParsedInst, ImmBits, ImmField, CareAboutSignExtend, IsSigned);
 

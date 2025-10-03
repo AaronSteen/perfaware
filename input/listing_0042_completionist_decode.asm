@@ -129,109 +129,105 @@ popf
 add cx, [bp]
 add dx, [bx + si]
 
-;75 
+;75 OK
 add [bp + di + 5000], ah
 add [bx], al
 add sp, 392 <----------
 add si, 5
 add ax, 1000
 
-; 80
+; 80 OK
 add ah, 30
 add al, 9
 add cx, bx
 add ch, al
 adc cx, [bp]
 
-; 85
+; 85 OK
 adc dx, [bx + si]
 adc [bp + di + 5000], ah
 adc [bx], al
 adc sp, 392
 adc si, 5
+
+; 90 OK
 adc ax, 1000
 adc ah, 30
 adc al, 9
 adc cx, bx
 adc ch, al
 
-; 95
+; 95 OK
 inc ax
 inc cx
 inc dh
 inc al
 inc ah
 
-; 100
+; 100 OK
 inc sp
 inc di
 inc byte [bp + 1002]
 inc word [bx + 39]
 inc byte [bx + si + 5]
 
-; 105
+; 105 OK
 inc word [bp + di - 10044]
 inc word [9349]
 inc byte [bp]
-
-; 108
 aaa
 daa
 
-; 110
+; 110 OK
 sub cx, [bp]
 sub dx, [bx + si]
 sub [bp + di + 5000], ah
 sub [bx], al
 sub sp, 392
 
-; 115
+; 115 OK
 sub si, 5
 sub ax, 1000
 sub ah, 30
 sub al, 9
 sub cx, bx
 
-; 120
+; 120 OK
 sub ch, al
-
-; 121
 sbb cx, [bp]
 sbb dx, [bx + si]
 sbb [bp + di + 5000], ah
 sbb [bx], al
-sbb sp, 392
 
-; 126
+; 125 OK
+sbb sp, 392
 sbb si, 5
 sbb ax, 1000
 sbb ah, 30
 sbb al, 9
+
+; 130 OK
 sbb cx, bx
-
-; 131
 sbb ch, al
-
-; 131
 dec ax
 dec cx
 dec dh
+
+; 135 OK
 dec al
 dec ah
-
-; 136
 dec sp
 dec di
 dec byte [bp + 1002]
+
+; 140 OK
 dec word [bx + 39]
 dec byte [bx + si + 5]
-
-; 141
 dec word [bp + di - 10044]
 dec word [9349]
 dec byte [bp]
 
-; 144
+; 145
 neg ax
 neg cx
 neg dh
