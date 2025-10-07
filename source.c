@@ -45,7 +45,7 @@ u8 ByteOneToDecodeGroupLUT[256] =
     /*C0*/ G7_ONEBYTE,  G7_ONEBYTE,  G9_MISC,  G7_ONEBYTE,  G9_MISC,   G9_MISC,   G2_IMM_RM,   G2_IMM_RM,     
     /*C8*/ G7_ONEBYTE,  G7_ONEBYTE,  G9_MISC,  G7_ONEBYTE,  G7_ONEBYTE,  G9_MISC,  G7_ONEBYTE,    G7_ONEBYTE,       
 
-    /*D0*/ G8_SHIFT,    G8_SHIFT,    G8_SHIFT, G8_SHIFT, G7_ONEBYTE, G7_ONEBYTE, G7_ONEBYTE, G7_ONEBYTE,
+    /*D0*/ G8_SHIFT,    G8_SHIFT,    G8_SHIFT, G8_SHIFT, G9_MISC, G9_MISC, G7_ONEBYTE, G7_ONEBYTE,
     /*D8*/ G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,        
 
     /*E0*/ G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,  G9_MISC,        
@@ -546,6 +546,23 @@ CheckIfArithmetic(u8 OpcodeEnum)
     }
 }
 
+bool
+CheckIfLogical(u8 OpcodeEnum)
+{
+    if(
+            (OpcodeEnum == AND) ||
+            (OpcodeEnum == TEST) ||
+            (OpcodeEnum == OR) ||
+            (OpcodeEnum == XOR) )
+    {
+        return(true);
+    }
+    else
+    {
+        return(false);
+    }
+}
+
 
 void
 ReadImmField(struct parsed_inst *ParsedInst, u8 *ImmBits, char *ImmBuffer, bool CareAboutSignExtend, bool IsSigned)
@@ -922,6 +939,10 @@ Group9Decode(struct decoded_inst *DecodedInst)
         strncpy(Temp, DecodedInst->OperandOne, MAX_STRING_LEN);
         strncpy(DecodedInst->OperandOne, DecodedInst->OperandTwo, MAX_STRING_LEN);
         strncpy(DecodedInst->OperandTwo, Temp, MAX_STRING_LEN);
+    }
+    else if( (DecodedInst->OpcodeEnum == AAD) || (DecodedInst->OpcodeEnum == AAM) )
+    {
+        DecodedInst->Size = 2;
     }
     else
     {
@@ -1337,7 +1358,12 @@ Group2Decode(struct decoded_inst *DecodedInst)
         
 
     }
+
     bool IsSigned = true;
+    if(CheckIfLogical(DecodedInst->OpcodeEnum))
+    {
+        IsSigned = false;
+    }
     ReadImmField(&ParsedInst, ImmBits, ImmField, CareAboutSignExtend, IsSigned);
 
     strncpy( DecodedInst->OperandOne, RorMField, (MAX_STRING_LEN - strlen(RorMField)) );
@@ -1467,42 +1493,48 @@ ReadExtendedOpcode(struct decoded_inst *DecodedInst)
         case 0xF6:
         case 0xF7:
         {
-            DecodedInst->DecodeGroup = G2_IMM_RM;
             switch(IHaveMetTheDistinguisher)
             {
                 case 0x00: // 000
                 {
                     DecodedInst->OpcodeEnum = TEST;
+                    DecodedInst->DecodeGroup = G2_IMM_RM;
                 } break;
 
                 case 0x10: // 010
                 {
                     DecodedInst->OpcodeEnum = NOT;
+                    DecodedInst->DecodeGroup = G3_UNARY_RM;
                 } break;
 
                 case 0x18: // 011
                 {
                     DecodedInst->OpcodeEnum = NEG;
+                    DecodedInst->DecodeGroup = G3_UNARY_RM;
                 } break;
 
                 case 0x20: // 100
                 {
                     DecodedInst->OpcodeEnum = MUL;
+                    DecodedInst->DecodeGroup = G3_UNARY_RM;
                 } break;
 
                 case 0x28: // 101
                 {
                     DecodedInst->OpcodeEnum = IMUL;
+                    DecodedInst->DecodeGroup = G3_UNARY_RM;
                 } break;
 
                 case 0x30: // 110
                 {
                     DecodedInst->OpcodeEnum = DIV;
+                    DecodedInst->DecodeGroup = G3_UNARY_RM;
                 } break;
 
                 case 0x38: // 111
                 {
                     DecodedInst->OpcodeEnum = IDIV;
+                    DecodedInst->DecodeGroup = G3_UNARY_RM;
             } break;
 
             default:

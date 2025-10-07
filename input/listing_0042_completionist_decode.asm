@@ -227,133 +227,119 @@ dec word [bp + di - 10044]
 dec word [9349]
 dec byte [bp]
 
-; 145
+; 145 OK
 neg ax
 neg cx
 neg dh
 neg al
 neg ah
 
-; 149
+; 149 OK
 neg sp
 neg di
 neg byte [bp + 1002]
 neg word [bx + 39]
 neg byte [bx + si + 5]
 
-; 154
+; 155 OK
 neg word [bp + di - 10044]
 neg word [9349]
 neg byte [bp]
-
-; 157
 cmp bx, cx
 cmp dh, [bp + 390]
+
+; 160 OK
 cmp [bp + 2], si
 cmp bl, 20
-cmp byte [bx], 34
-
-; 162
+cmp byte [bx], 34 
 cmp ax, 23909
-
-; 163
 aas
-das
 
-; 165
+; 165 OK
+das
 mul al
 mul cx
 mul word [bp]
 mul byte [bx + di + 500]
 
-; 169
+; 170 OK
 imul ch
 imul dx
 imul byte [bx]
 imul word [9483]
-
-; 173
 aam
 
-; 174
+; 175 OK
 div bl
 div sp
 div byte [bx + si + 2990]
 div word [bp + di + 1000]
-
-; 178
 idiv ax
+
+; 180 OK
 idiv si
 idiv byte [bp + si]
 idiv word [bx + 493]
-
-; 182
 aad
 cbw
-cwd
 
-; 186
+; 185 OK
+cwd
 not ah
 not bl
 not sp
 not si
+
+; 190 OK
 not word [bp]
-
-; 191
 not byte [bp + 9905]
-
-; 192
 shl ah, 1
 shr ax, 1
 sar bx, 1
+
+; 195 OK
 rol cx, 1
 ror dh, 1
-
-; 197
 rcl sp, 1
 rcr bp, 1
-
-; 199
 shl word [bp + 5], 1
+
+; 200 OK
 shr byte [bx + si - 199], 1
 sar byte [bx + di - 300], 1
 rol word [bp], 1
 ror word [4938], 1
-
-; 204
 rcl byte [3], 1
-rcr word [bx], 1
 
-; 206
+; 205 OK
+rcr word [bx], 1
 shl ah, cl
 shr ax, cl
 sar bx, cl
 rol cx, cl
-ror dh, cl
 
-; 211
+; 210 OK
+ror dh, cl
 rcl sp, cl
 rcr bp, cl
-
-; 213
 shl word [bp + 5], cl
 shr word [bx + si - 199], cl
+
+; 215 OK
 sar byte [bx + di - 300], cl
 rol byte [bp], cl
 ror byte [4938], cl
-
-; 218
 rcl byte [3], cl
 rcr word [bx], cl
 
-; 220
+; 220 OK
 and al, ah
 and ch, cl
 and bp, si
 and di, sp
 and al, 93
 
-; 225
+; 225 OK
 and ax, 20392
 and [bp + si + 10], ch
 and [bx + di + 1000], dx
@@ -361,34 +347,30 @@ and bx, [bp]
 and cx, [4384]
 
 ; 230
-and byte [bp - 39], 239
+and byte [bp - 39], 239 
 and word [bx + si - 4332], 10328
-
-; 232
 test bx, cx
 test dh, [bp + 390]
 test [bp + 2], si
+
+; 235
 test bl, 20
 test byte [bx], 34
-
-; 237
 test ax, 23909
-
-; 238
 or al, ah
 or ch, cl
+
+; 240
 or bp, si
 or di, sp
 or al, 93
-
-; 243
 or ax, 20392
 or [bp + si + 10], ch
+
+; 245
 or [bx + di + 1000], dx
 or bx, [bp]
 or cx, [4384]
-
-; 248
 or byte [bp - 39], 239
 or word [bx + si - 4332], 10328
 
@@ -409,15 +391,13 @@ xor cx, [4384]
 ; 230
 xor byte [bp - 39], 239
 xor word [bx + si - 4332], 10328
-
-; 232
 rep movsb
 rep cmpsb
 rep scasb
+
+; 235
 rep lodsb
 rep movsw
-
-; 237
 rep cmpsw
 rep scasw
 rep lodsw
@@ -430,14 +410,12 @@ rep lodsw
 ; 240
 rep stosb
 rep stosw
-
-; 242
 call [39201]
 call [bp - 100]
 call sp
-call ax
 
-; 246
+; 245
+call ax
 jmp ax
 jmp di
 jmp [12]
@@ -447,79 +425,70 @@ jmp [4395]
 ret -7
 ret 500
 ret
-
-
 label:
-; 253
 je label
+
+; 255
 jl label
 jle label
 jb label
 jbe label
-
-; 258
 jp label
+
+; 260
 jo label
 js label
 jne label
 jnl label
-
-; 263
 jg label
+
+; 265
 jnb label
 ja label
 jnp label
 jno label
-
-; 268
 jns label
+
+; 270
 loop label
 loopz label
 loopnz label
 jcxz label
-
-; 273    
 int 13
-int3
 
-; 275
+; 285
+int3
 into
 iret
-
-; 277
 clc
 cmc
+
+; 290
 stc
 cld
 std
-
-; 283
 cli
 sti
+
+; 295
 hlt
 wait
-
-; 287
 lock not byte [bp + 9905]
 lock xchg [100], al
-
-; 289
 mov al, cs:[bx + si]
+
+; 300
 mov bx, ds:[bp + di]
 mov dx, es:[bp]
 mov ah, ss:[bx + si + 4]
-
-; 293
 and ss:[bp + si + 10], ch
 or ds:[bx + di + 1000], dx
+
+; 305
 xor bx, es:[bp]
 cmp cx, es:[4384]
 test byte cs:[bp - 39], 239
-
-; 298
 sbb word cs:[bx + si - 4332], 10328
-
-; 299
 lock not byte CS:[bp + 9905]
 
 ;
