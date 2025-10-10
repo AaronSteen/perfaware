@@ -1,7 +1,8 @@
 #include "common.h"
 #include "source.c"
+#include "tables.c"
 
-struct inst_stream InstStream;
+struct inst_stream InstStream = {0};
 
 int 
 main(int argc, char **argv)
