@@ -18,6 +18,8 @@ main(int argc, char **argv)
     InstStream = Win32_LoadInstStream(FileHandle);
     u8 *IP = InstStream.Start;
 
+    union registers Registers = {0};
+
     while(IP < InstStream.DoNotCrossThisLine)
     {
         struct decoded_inst DecodedInst = {0};
@@ -87,11 +89,15 @@ main(int argc, char **argv)
             } break;
         }
 
+        DoInstruction(&DecodedInst, &Registers);
+
         Debug_PrintCurrentStatus(&DecodedInst, InstStream.Idx);
 
         IP += DecodedInst.Size;
         ++InstStream.Idx;
     }
+
+    Debug_PrintFinalRegisterState(&Registers);
 
     return(0);
 }

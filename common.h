@@ -7,6 +7,7 @@
 
 typedef uint8_t u8;
 typedef uint16_t u16;
+typedef uint32_t u32;
 typedef int8_t s8;
 typedef int16_t s16;
 
@@ -14,19 +15,6 @@ typedef int16_t s16;
 #define MAX_STRING_LEN 255
 #define DIRECT_ADDRESS 0x06
 #define Debug_OutputErrorMessage(Msg) __Debug_OutputErrorMessage(Msg, __func__, __LINE__)
-
-struct parsed_inst
-{
-    bool DestFlag;
-    bool IsWord;
-    u8 Mod;
-    u8 Reg;
-    u8 RorM;
-    s8 Disp8;
-    s16 Disp16;
-    u8 AuxiliaryField;
-    u8 *Binary;
-};
 
 struct inst_stream
 {
@@ -40,7 +28,7 @@ extern struct inst_stream InstStream;
 extern char *MnemonicLUT[];
 extern char *ByteRegLUT[];
 extern char *WordRegLUT[];
-extern char *SegRegLUT[];
+extern char *OtherRegLUT[];
 extern char *EffectiveAddressLUT[];
 extern u8 ByteOneToOpcodeEnumLUT[];
 extern char *OpcodeEnumToStringLUT[];
@@ -53,8 +41,48 @@ struct decoded_inst
     u8 OpcodeEnum;
     u8 DecodeGroup;
     char *Mnemonic;
-    char OperandOne[MAX_STRING_LEN];
-    char OperandTwo[MAX_STRING_LEN];
+    bool DestFlag;
+    bool IsWord;
+    u8 Mod;
+    u8 Reg;
+    u8 RorM;
+    char OperandOneStr[MAX_STRING_LEN];
+    char OperandTwoStr[MAX_STRING_LEN];
+    u16 OperandOne;
+    u16 OperandTwo;
+};
+
+#define NUMBER_OF_WORD_SIZED_REGISTERS 14
+union registers
+{
+    struct
+    {
+        union 
+        {
+            u16 AX; struct { u8 AL, AH; };
+        };
+
+        union 
+        {
+            u16 BX; struct { u8 BL, BH; };
+        };
+
+        union 
+        {
+            u16 CX; struct { u8 CL, CH; };
+        };
+
+        union 
+        {
+            u16 DX; struct { u8 DL, DH; };   
+        };
+
+        u16 SP, BP, SI, DI, ES, CS, SS, DS, IP, Flags;
+    };
+
+    u16 WordRegisters[NUMBER_OF_WORD_SIZED_REGISTERS];
+    u8 ByteRegisters[NUMBER_OF_WORD_SIZED_REGISTERS][2];
+
 };
 
 enum
@@ -175,18 +203,8 @@ enum
     R_OR_M_FIELD = 0x07
 };
 
-enum 
-{
-    G1_RM_REG = 1,   // [.... ..dw] [mod reg r/m] [disp-lo] [disp-hi]
-    G2_IMM_RM,       // [.... ..sw] or [.... ..dw] [mod <type> r/m] [disp-lo] [disp-hi] [data] [data]
-    G3_UNARY_RM,     // [.... ...w] [mod <type> r/m] [disp-lo] [disp-hi]
-    G4_ACC_IMM,      // [.... ...w] [data] [data]
-    G5_OPREG_NODATA,        // [.... .reg] (no trailing immediate value)
-    G6_OPREG_IMM,    // [.... w reg] [data] [data] (up to two bytes for trailing imm value)
-    G7_ONEBYTE,      // one byte with no operands
-    G8_SHIFT,        // shifts/rotates D0–D3
-    G9_MISC,      // miscellaneous; mostly I/O, control flow
-};
+
+
 
 
 

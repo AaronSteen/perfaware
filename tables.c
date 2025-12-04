@@ -4,9 +4,28 @@
 
 char *EffectiveAddressLUT[] = { "[bx + si", "[bx + di",  "[bp + si", "[bp + di", "[si", "[di", "[bp", "[bx" }; 
 char *ByteRegLUT[] = {"al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"};
+enum {AL, CL, DL, BL, AH, CH, DH, BH};
 char *WordRegLUT[] = {"ax", "cx", "dx", "bx", "sp", "bp", "si", "di"};
-char *SegRegLUT[] = {"es", "cs", "ss", "ds"};
+enum {AX, CX, DX, BX, SP, BP, SI, DI};
+char *OtherRegLUT[] = {"es", "cs", "ss", "ds", "ip", "flags"};
 
+enum 
+{
+    G1_RM_REG = 1,   // [.... ..dw] [mod reg r/m] [disp-lo] [disp-hi]
+    G2_IMM_RM,       // [.... ..sw] or [.... ..dw] [mod <type> r/m] [disp-lo] [disp-hi] [data] [data]
+    G3_UNARY_RM,     // [.... ...w] [mod <type> r/m] [disp-lo] [disp-hi]
+    G4_ACC_IMM,      // [.... ...w] [data] [data]
+    G5_OPREG_NODATA,        // [.... .reg] (no trailing immediate value)
+    G6_OPREG_IMM,    // [.... w reg] [data] [data] (up to two bytes for trailing imm value)
+    G7_ONEBYTE,      // one byte with no operands
+    G8_SHIFT,        // shifts/rotates D0–D3
+    G9_MISC,      // miscellaneous; mostly I/O, control flow
+};
+
+
+// POP Segment Register
+//      000 reg 111
+//
 u8 ByteOneToDecodeGroupLUT[256] =
 {
     /*00*/ G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G4_ACC_IMM,  G4_ACC_IMM,  G5_OPREG_NODATA, G5_OPREG_NODATA,

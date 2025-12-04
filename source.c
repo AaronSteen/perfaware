@@ -1,5 +1,6 @@
 #include "common.h"
 #include "tables.c"
+#include "assert.h"
 
 void
 __Debug_OutputErrorMessage(char *ErrorMessage, const char *CallingFunction, int Line)
@@ -18,7 +19,7 @@ Debug_PrintBinary(u8 Value)
 {
     for(int i = 0; i < 8; i++)
     {
-       int ShiftAmt = (7 - i);
+        int ShiftAmt = (7 - i);
         u8 Digit = ((Value >> ShiftAmt) & 1);
         if(Digit)
         {
@@ -35,6 +36,73 @@ Debug_PrintBinary(u8 Value)
     }
 }
 
+// char *
+// Debug_GetRegNameAsString(int i)
+// {
+//
+//     // We have to convert the index of the register whose name we want to print
+//     //      from our logical, alphabetical, linear indexing scheme to the
+//     //      psycho octal codes 8086 uses, which we have previously enumed in common.h
+//     if(IsOtherReg)
+//     {
+//         OctalIndices = {[
+//
+//
+//
+//     }
+//     int OctalIndices[] = {AX, BX, CX, DX, SP, BP, SI, DI, ES, CS, SS, DS, IP, FLAGS};
+//     int OctalIndex = OctalIndices[i];
+//     // Then we use the octal index to look up the string for the register's name,
+//     //      in the same way we do during decoding.
+//     return(WordRegLUT[OctalIndex]);
+// }
+
+void
+Debug_PrintUpdatedRegisterState(struct decoded_inst *DecodedInst, union registers *NewRegisters,
+                                   union registers *OldRegisters)
+{
+    char *SpecialCombinedWordRegLUT[] = 
+            {"ax", "bx", "cx", "dx", "sp", "bp", "si", "di", "es", "cs", "ss", "ds", "ip", "flags"};
+    // Print the decoded instruction
+    printf("%s %s, %s       ; ", DecodedInst->Mnemonic, DecodedInst->OperandOneStr, DecodedInst->OperandTwoStr);
+    bool NeedSpacing = false;
+    for(int i = 0; i < NUMBER_OF_WORD_SIZED_REGISTERS; i++)
+    {
+        if(NewRegisters->WordRegisters[i] != OldRegisters->WordRegisters[i])
+        {
+            // map our logical 8086 register layout in memory to the psycho
+            //      8086 octal encoding since they are not the same
+            char *RegName = SpecialCombinedWordRegLUT[i];
+            if(NeedSpacing)
+            {
+                printf("                ; ");
+            }
+            printf("%8s: 0x%02x->0x%02x\n", RegName, OldRegisters->WordRegisters[i], NewRegisters->WordRegisters[i]);
+            NeedSpacing = true;
+        }
+    }
+}
+void
+Debug_PrintFinalRegisterState(union registers *Registers)
+{
+    char *SpecialCombinedWordRegLUT[] = 
+            {"ax", "bx", "cx", "dx", "sp", "bp", "si", "di", "es", "cs", "ss", "ds", "ip", "flags"};
+
+    printf("Final registers:\n");
+
+    for(int i = 0; i < NUMBER_OF_WORD_SIZED_REGISTERS; i++)
+    {
+        if(Registers->WordRegisters[i])
+        {
+            char *RegName = SpecialCombinedWordRegLUT[i];
+            u16 Value = Registers->WordRegisters[i];
+            printf("%8s: ", RegName);
+            printf("0x%04x (%u)", Value, Value);
+            printf("\n");
+        }
+    }
+}
+
 void
 Debug_PrintCurrentStatus(struct decoded_inst *DecodedInst, int InstStreamIdx)
 {
@@ -43,8 +111,8 @@ Debug_PrintCurrentStatus(struct decoded_inst *DecodedInst, int InstStreamIdx)
     sprintf_s(DecodedInstBuf, sizeof(DecodedInstBuf), "\n         Idx %d         \n", InstStreamIdx);
     OutputDebugStringA(DecodedInstBuf);
     sprintf_s(DecodedInstBuf, sizeof(DecodedInstBuf), "\n  *** %s %s%s %s ***  \n\n", 
-                DecodedInst->Mnemonic, DecodedInst->OperandOne, 
-                ( (DecodedInst->OperandTwo[0] != '\0') ? "," : "" ), DecodedInst->OperandTwo);
+                DecodedInst->Mnemonic, DecodedInst->OperandOneStr, 
+                ( (DecodedInst->OperandTwoStr[0] != '\0') ? "," : "" ), DecodedInst->OperandTwoStr);
     OutputDebugStringA(DecodedInstBuf);
 
     // Print the bytes we just decoded, and a preview of the next few bytes of the instruction stream
@@ -172,29 +240,31 @@ Win32_LoadInstStream(HANDLE FileHandle)
 }
 
 void
-LookUpReg(struct parsed_inst *ParsedInst, char *StrBuffer)
+LookUpReg(struct decoded_inst *DecodedInst, char *StrBuffer)
 {
     int DoNotOverflow = MAX_STRING_LEN - strlen(StrBuffer);
-    if(ParsedInst->IsWord)
+    if(DecodedInst->IsWord)
     {
-        strncat(StrBuffer, WordRegLUT[ParsedInst->Reg], DoNotOverflow);
+        // look up the string corresponding to the register
+        strncat(StrBuffer, WordRegLUT[DecodedInst->Reg], DoNotOverflow);
     }
     else
     {
-        strncat(StrBuffer, ByteRegLUT[ParsedInst->Reg], DoNotOverflow);
+        // as above but for byte-width registers
+        strncat(StrBuffer, ByteRegLUT[DecodedInst->Reg], DoNotOverflow);
     }
 }
 
 void
-LookUpEffectiveAddress(struct parsed_inst *ParsedInst, char *StrBuffer)
+LookUpEffectiveAddress(struct decoded_inst *DecodedInst, char *StrBuffer)
 {
-    if(ParsedInst->IsWord)
+    if(DecodedInst->IsWord)
     {
-        strncat(StrBuffer, EffectiveAddressLUT[ParsedInst->RorM], MAX_STRING_LEN);
+        strncat(StrBuffer, EffectiveAddressLUT[DecodedInst->RorM], MAX_STRING_LEN);
     }
     else
     {
-        strncat(StrBuffer, EffectiveAddressLUT[ParsedInst->RorM], MAX_STRING_LEN);
+        strncat(StrBuffer, EffectiveAddressLUT[DecodedInst->RorM], MAX_STRING_LEN);
     }
 }
 
@@ -234,40 +304,40 @@ GetIntAsString_16(u16 UnsignedIntBits, char *StrBuffer, bool Signed)
 }
 
 void
-ReadRorMField(struct parsed_inst *ParsedInst, char *RorMBuffer)
+ReadRorMField(struct decoded_inst *DecodedInst, char *RorMBuffer)
 {
-    if(ParsedInst->Mod == REG_MODE)
+    if(DecodedInst->Mod == REG_MODE)
     {
         int DoNotOverflow = MAX_STRING_LEN - strlen(RorMBuffer);
-        if(ParsedInst->IsWord)
+        if(DecodedInst->IsWord)
         {
-            strncat(RorMBuffer, WordRegLUT[ParsedInst->RorM], DoNotOverflow);
+            strncat(RorMBuffer, WordRegLUT[DecodedInst->RorM], DoNotOverflow);
         }
         else
         {
-            strncat(RorMBuffer, ByteRegLUT[ParsedInst->RorM], DoNotOverflow);
+            strncat(RorMBuffer, ByteRegLUT[DecodedInst->RorM], DoNotOverflow);
         }
         return;
     }
 
     // Else it's a memory operation
-    if(ParsedInst->Mod == MEM_MODE_NO_DISP)
+    if(DecodedInst->Mod == MEM_MODE_NO_DISP)
     {
-        if(ParsedInst->RorM == DIRECT_ADDRESS)
+        if(DecodedInst->RorM == DIRECT_ADDRESS)
         {
-            u16 DispBits = *(u16 *)(ParsedInst->Binary + 2);
+            u16 DispBits = *(u16 *)(DecodedInst->Binary + 2);
             strncat(RorMBuffer, "[", MAX_STRING_LEN);
             GetIntAsString_16(DispBits, RorMBuffer, false);
         }
         else
         {
-            LookUpEffectiveAddress(ParsedInst, RorMBuffer);
+            LookUpEffectiveAddress(DecodedInst, RorMBuffer);
         }
     }
-    else if(ParsedInst->Mod == MEM_MODE_DISP_8)
+    else if(DecodedInst->Mod == MEM_MODE_DISP_8)
     {
-        LookUpEffectiveAddress(ParsedInst, RorMBuffer);
-        s8 DispBits = *(s8 *)(ParsedInst->Binary + 2);
+        LookUpEffectiveAddress(DecodedInst, RorMBuffer);
+        s8 DispBits = *(s8 *)(DecodedInst->Binary + 2);
         if(DispBits != 0)
         {
             char DispBuffer[MAX_STRING_LEN] = {0};
@@ -289,10 +359,10 @@ ReadRorMField(struct parsed_inst *ParsedInst, char *RorMBuffer)
             }
         }
     }
-    else if(ParsedInst->Mod == MEM_MODE_DISP_16)
+    else if(DecodedInst->Mod == MEM_MODE_DISP_16)
     {
-        LookUpEffectiveAddress(ParsedInst, RorMBuffer);
-        s16 DispBits = *(s16 *)(ParsedInst->Binary + 2);
+        LookUpEffectiveAddress(DecodedInst, RorMBuffer);
+        s16 DispBits = *(s16 *)(DecodedInst->Binary + 2);
         if(DispBits != 0)
         {
             char DispBuffer[MAX_STRING_LEN] = {0};
@@ -360,14 +430,14 @@ CheckIfLogical(u8 OpcodeEnum)
 
 
 void
-ReadImmField(struct parsed_inst *ParsedInst, u8 *ImmBits, char *ImmBuffer, bool CareAboutSignExtend, bool IsSigned)
+ReadImmField(struct decoded_inst *DecodedInst, u8 *ImmBits, char *ImmBuffer, bool CareAboutSignExtend, bool IsSigned)
 {
-    if(ParsedInst->IsWord)
+    if(DecodedInst->IsWord)
     {
         u16 ImmValue = 0;
         if(CareAboutSignExtend)
         {
-            bool IsSignExtended = (bool)(ParsedInst->Binary[0] & 0x02);
+            bool IsSignExtended = (bool)(DecodedInst->Binary[0] & 0x02);
             if(IsSignExtended)
             {
                 u8 Temp_u8 = *ImmBits;
@@ -389,6 +459,7 @@ ReadImmField(struct parsed_inst *ParsedInst, u8 *ImmBits, char *ImmBuffer, bool 
         u8 ImmValue = *(u8 *)ImmBits;
         GetIntAsString_8(ImmValue, ImmBuffer, IsSigned);
     }
+
 }
 
 void
@@ -402,18 +473,18 @@ InOutDecode(struct decoded_inst *DecodedInst)
     //      Fixed port: [1110 011w] [data-8]
     //      Variable port: [1110 111w] (assume d register stores port address)
 
-    struct parsed_inst ParsedInst = {0};
+    
     u8 ByteOne = DecodedInst->Binary[0];
     u8 ByteTwo = DecodedInst->Binary[1];
     char AccumBuffer[MAX_STRING_LEN] = {0};
     char PortBuffer[MAX_STRING_LEN] = {0};
 
-    ParsedInst.Binary = DecodedInst->Binary;
-    ParsedInst.IsWord = (bool)(ByteOne & 0x01);
+    
+    DecodedInst->IsWord = (bool)(ByteOne & 0x01);
     bool IsVariablePort = (bool)(ByteOne & 0x08);
 
     DecodedInst->Size = 1;
-    if(ParsedInst.IsWord)
+    if(DecodedInst->IsWord)
     {
         strncpy(AccumBuffer, "ax", 2);
     }
@@ -435,13 +506,13 @@ InOutDecode(struct decoded_inst *DecodedInst)
 
     if(DecodedInst->OpcodeEnum == IN_)
     {
-        strncpy(DecodedInst->OperandOne, AccumBuffer, MAX_STRING_LEN);
-        strncpy(DecodedInst->OperandTwo, PortBuffer, MAX_STRING_LEN);
+        strncpy(DecodedInst->OperandOneStr, AccumBuffer, MAX_STRING_LEN);
+        strncpy(DecodedInst->OperandTwoStr, PortBuffer, MAX_STRING_LEN);
     }
     else
     {
-        strncpy(DecodedInst->OperandOne, PortBuffer, MAX_STRING_LEN);
-        strncpy(DecodedInst->OperandTwo, AccumBuffer, MAX_STRING_LEN);
+        strncpy(DecodedInst->OperandOneStr, PortBuffer, MAX_STRING_LEN);
+        strncpy(DecodedInst->OperandTwoStr, AccumBuffer, MAX_STRING_LEN);
     }
 }
 
@@ -529,7 +600,7 @@ RepeatDecode(struct decoded_inst *DecodedInst)
         } break;
     }
 
-    strncpy(DecodedInst->OperandOne, StringInst, MAX_STRING_LEN);
+    strncpy(DecodedInst->OperandOneStr, StringInst, MAX_STRING_LEN);
 }
 
 void
@@ -542,28 +613,27 @@ CallJumpDecode(struct decoded_inst *DecodedInst)
     //      [1001 1010] [IP-lo] [IP-hi]
     //                 [CS-lo] [CS-hi]
 
-    struct parsed_inst ParsedInst = {0};
+    
     u8 ByteOne = DecodedInst->Binary[0];
     u8 ByteTwo = DecodedInst->Binary[1];
-    ParsedInst.Mod = ((ByteTwo & MOD_FIELD) >> 6);
-    ParsedInst.RorM = (ByteTwo & R_OR_M_FIELD);
-    ParsedInst.IsWord = true;
-    ParsedInst.Binary = DecodedInst->Binary;
+    DecodedInst->Mod = ((ByteTwo & MOD_FIELD) >> 6);
+    DecodedInst->RorM = (ByteTwo & R_OR_M_FIELD);
+    DecodedInst->IsWord = true;
 
     if(ByteOne == 0xFF)
     {
-        ReadRorMField(&ParsedInst, DecodedInst->OperandOne);
+        ReadRorMField(DecodedInst, DecodedInst->OperandOneStr);
         DecodedInst->Size = 2;
-        if( (ParsedInst.Mod == MEM_MODE_NO_DISP) && (ParsedInst.RorM == 0x06) )
+        if( (DecodedInst->Mod == MEM_MODE_NO_DISP) && (DecodedInst->RorM == 0x06) )
         {
             // Direct address
             DecodedInst->Size = 4;
         }
-        else if(ParsedInst.Mod == MEM_MODE_DISP_8)
+        else if(DecodedInst->Mod == MEM_MODE_DISP_8)
         {
             DecodedInst->Size += 1;
         }
-        else if(ParsedInst.Mod == MEM_MODE_DISP_16)
+        else if(DecodedInst->Mod == MEM_MODE_DISP_16)
         {
             DecodedInst->Size += 2;
         }
@@ -597,40 +667,38 @@ IsThisALabelInstruction(u8 OpcodeEnum)
 void
 DirectAddressMovDecode(struct decoded_inst *DecodedInst)
 {
-    struct parsed_inst ParsedInst = {0};
-    char DirectAddress[MAX_STRING_LEN] = {0};
-    char Reg[MAX_STRING_LEN] = {0};
+    char DirectAddressBuffer[MAX_STRING_LEN] = {0};
+    char RegBuffer[MAX_STRING_LEN] = {0};
     u8 ByteOne = DecodedInst->Binary[0];
-    ParsedInst.IsWord = (bool)(ByteOne & 0x01);
-
-    bool IsWrite = (bool)((ByteOne & 0x02) >> 1);
+    DecodedInst->IsWord = (bool)(ByteOne & 0x01);
+    DecodedInst->DestFlag = (bool)((ByteOne & 0x02) >> 1);
 
     DecodedInst->Size = 3;
 
-    if(ParsedInst.IsWord)
+    if(DecodedInst->IsWord)
     {
-        strncpy(Reg, "ax", 2);
+        strncpy(RegBuffer, "ax", 2);
     }
     else
     {
-        strncpy(Reg, "al", 2);
+        strncpy(RegBuffer, "al", 2);
     }
 
+    strncat(DirectAddressBuffer, "[", MAX_STRING_LEN);
     u16 DirectAddressBytes = *(u16 *)(DecodedInst->Binary + 1);
-    strncat(DirectAddress, "[", MAX_STRING_LEN);
     bool IsSigned = false;
-    GetIntAsString_16(DirectAddressBytes, DirectAddress, IsSigned);
-    strncat(DirectAddress, "]", MAX_STRING_LEN);
+    GetIntAsString_16(DirectAddressBytes, DirectAddressBuffer, IsSigned);
+    strncat(DirectAddressBuffer, "]", MAX_STRING_LEN);
 
-    if(IsWrite)
+    if(DecodedInst->DestFlag)
     {
-        strncpy(DecodedInst->OperandOne, DirectAddress, MAX_STRING_LEN);
-        strncpy(DecodedInst->OperandTwo, Reg, MAX_STRING_LEN);
+        strncpy(DecodedInst->OperandOneStr, DirectAddressBuffer, MAX_STRING_LEN);
+        strncpy(DecodedInst->OperandTwoStr, RegBuffer, MAX_STRING_LEN);
     }
     else
     {
-        strncpy(DecodedInst->OperandOne, Reg, MAX_STRING_LEN);
-        strncpy(DecodedInst->OperandTwo, DirectAddress, MAX_STRING_LEN);
+        strncpy(DecodedInst->OperandOneStr, RegBuffer, MAX_STRING_LEN);
+        strncpy(DecodedInst->OperandTwoStr, DirectAddressBuffer, MAX_STRING_LEN);
     }
 
 }
@@ -639,45 +707,45 @@ DirectAddressMovDecode(struct decoded_inst *DecodedInst)
 void
 Group1Decode(struct decoded_inst *DecodedInst)
 {
-    struct parsed_inst ParsedInst = {0};
+    
     char RegField[MAX_STRING_LEN] = {0};
     char RorMField[MAX_STRING_LEN] = {0};
     u8 ByteOne = DecodedInst->Binary[0];
     u8 ByteTwo = DecodedInst->Binary[1];
 
-    ParsedInst.Binary = DecodedInst->Binary;
-    ParsedInst.DestFlag = (bool)((ByteOne & 0x02) >> 1);
-    ParsedInst.IsWord = (bool)(ByteOne & 0x01);
-    ParsedInst.Mod = ((ByteTwo & MOD_FIELD) >> 6);
-    ParsedInst.Reg = ((ByteTwo & FLEX_FIELD) >> 3);
-    ParsedInst.RorM = (ByteTwo & R_OR_M_FIELD);
+    
+    DecodedInst->DestFlag = (bool)((ByteOne & 0x02) >> 1);
+    DecodedInst->IsWord = (bool)(ByteOne & 0x01);
+    DecodedInst->Mod = ((ByteTwo & MOD_FIELD) >> 6);
+    DecodedInst->Reg = ((ByteTwo & FLEX_FIELD) >> 3);
+    DecodedInst->RorM = (ByteTwo & R_OR_M_FIELD);
 
-    LookUpReg(&ParsedInst, RegField);
-    ReadRorMField(&ParsedInst, RorMField);
+    LookUpReg(DecodedInst, RegField);
+    ReadRorMField(DecodedInst, RorMField);
     
     DecodedInst->Size = 2;
-    if( (ParsedInst.Mod == MEM_MODE_NO_DISP) && (ParsedInst.RorM == DIRECT_ADDRESS) )
+    if( (DecodedInst->Mod == MEM_MODE_NO_DISP) && (DecodedInst->RorM == DIRECT_ADDRESS) )
     {
         DecodedInst->Size = 4;
     }
-    else if(ParsedInst.Mod == MEM_MODE_DISP_8)
+    else if(DecodedInst->Mod == MEM_MODE_DISP_8)
     {
         DecodedInst->Size += 1;
     }
-    else if(ParsedInst.Mod == MEM_MODE_DISP_16)
+    else if(DecodedInst->Mod == MEM_MODE_DISP_16)
     {
         DecodedInst->Size += 2;
     }
 
-    if(ParsedInst.DestFlag)
+    if(DecodedInst->DestFlag)
     {
-        strncpy(DecodedInst->OperandOne, RegField, strlen(RegField));
-        strncpy(DecodedInst->OperandTwo, RorMField, strlen(RorMField));
+        strncpy(DecodedInst->OperandOneStr, RegField, strlen(RegField));
+        strncpy(DecodedInst->OperandTwoStr, RorMField, strlen(RorMField));
     }
     else
     {
-        strncpy(DecodedInst->OperandOne, RorMField, strlen(RorMField));
-        strncpy(DecodedInst->OperandTwo, RegField, strlen(RegField));
+        strncpy(DecodedInst->OperandOneStr, RorMField, strlen(RorMField));
+        strncpy(DecodedInst->OperandTwoStr, RegField, strlen(RegField));
     }
 }
 
@@ -704,36 +772,36 @@ Group9Decode(struct decoded_inst *DecodedInst)
     {
         DecodedInst->Size = 3;
         bool IsSigned = true;
-        GetIntAsString_16( (*(u16 *)(DecodedInst->Binary + 1)), DecodedInst->OperandOne, IsSigned);
+        GetIntAsString_16( (*(u16 *)(DecodedInst->Binary + 1)), DecodedInst->OperandOneStr, IsSigned);
     }
     else if(IsThisALabelInstruction(DecodedInst->OpcodeEnum))
     {
         DecodedInst->Size = 2;
-        strncpy(DecodedInst->OperandOne, "label", MAX_STRING_LEN);
+        strncpy(DecodedInst->OperandOneStr, "label", MAX_STRING_LEN);
     }
     else if(DecodedInst->OpcodeEnum == INT_)
     {
         DecodedInst->Size = 2;
         bool IsSigned = false;
-        GetIntAsString_8(DecodedInst->Binary[1], DecodedInst->OperandOne, IsSigned);
+        GetIntAsString_8(DecodedInst->Binary[1], DecodedInst->OperandOneStr, IsSigned);
     }
     else if( (DecodedInst->OpcodeEnum == LEA) || (DecodedInst->OpcodeEnum == LDS) )
     {
         Group1Decode(DecodedInst);
         char Temp[MAX_STRING_LEN] = {0};
-        strncpy(Temp, DecodedInst->OperandOne, MAX_STRING_LEN);
-        strncpy(DecodedInst->OperandOne, DecodedInst->OperandTwo, MAX_STRING_LEN);
-        strncpy(DecodedInst->OperandTwo, Temp, MAX_STRING_LEN);
+        strncpy(Temp, DecodedInst->OperandOneStr, MAX_STRING_LEN);
+        strncpy(DecodedInst->OperandOneStr, DecodedInst->OperandTwoStr, MAX_STRING_LEN);
+        strncpy(DecodedInst->OperandTwoStr, Temp, MAX_STRING_LEN);
     }
     else if(DecodedInst->OpcodeEnum == LES)
     {
         Group1Decode(DecodedInst);
         int RegCode = ( ((DecodedInst->Binary[1]) & FLEX_FIELD) >> 3 );
-        strncpy(DecodedInst->OperandTwo, WordRegLUT[RegCode], MAX_STRING_LEN);
+        strncpy(DecodedInst->OperandTwoStr, WordRegLUT[RegCode], MAX_STRING_LEN);
         char Temp[MAX_STRING_LEN] = {0};
-        strncpy(Temp, DecodedInst->OperandOne, MAX_STRING_LEN);
-        strncpy(DecodedInst->OperandOne, DecodedInst->OperandTwo, MAX_STRING_LEN);
-        strncpy(DecodedInst->OperandTwo, Temp, MAX_STRING_LEN);
+        strncpy(Temp, DecodedInst->OperandOneStr, MAX_STRING_LEN);
+        strncpy(DecodedInst->OperandOneStr, DecodedInst->OperandTwoStr, MAX_STRING_LEN);
+        strncpy(DecodedInst->OperandTwoStr, Temp, MAX_STRING_LEN);
     }
     else if( (DecodedInst->OpcodeEnum == AAD) || (DecodedInst->OpcodeEnum == AAM) )
     {
@@ -767,24 +835,24 @@ Group9Decode(struct decoded_inst *DecodedInst)
 void
 Group8Decode(struct decoded_inst *DecodedInst)
 {
-    struct parsed_inst ParsedInst = {0};
+    
     u8 ByteOne = DecodedInst->Binary[0];
     u8 ByteTwo = DecodedInst->Binary[1];
     char DestBuffer[MAX_STRING_LEN] = {0};
     char CountBuffer[MAX_STRING_LEN] = {0};
 
-    ParsedInst.Binary = DecodedInst->Binary;
+    
     bool VFlag = (bool)(ByteOne & 0x02);
-    ParsedInst.IsWord = (bool)(ByteOne & 0x01);
-    ParsedInst.Mod = ((ByteTwo & MOD_FIELD) >> 6);
-    ParsedInst.RorM = (ByteTwo & R_OR_M_FIELD);
+    DecodedInst->IsWord = (bool)(ByteOne & 0x01);
+    DecodedInst->Mod = ((ByteTwo & MOD_FIELD) >> 6);
+    DecodedInst->RorM = (ByteTwo & R_OR_M_FIELD);
 
 // [.... ..vw] [mod ... r/m] [disp-lo] [disp-hi]
 
     DecodedInst->Size = 2;
-    if(ParsedInst.Mod != REG_MODE)
+    if(DecodedInst->Mod != REG_MODE)
     {
-        if(ParsedInst.IsWord)
+        if(DecodedInst->IsWord)
         {
             strncat( DestBuffer, "word ", (MAX_STRING_LEN - strlen(DestBuffer)) );
         }
@@ -793,32 +861,32 @@ Group8Decode(struct decoded_inst *DecodedInst)
             strncat( DestBuffer, "byte ", (MAX_STRING_LEN - strlen(DestBuffer)) );
         }
 
-        if( (ParsedInst.Mod == MEM_MODE_NO_DISP) && (ParsedInst.RorM == 0x06) )
+        if( (DecodedInst->Mod == MEM_MODE_NO_DISP) && (DecodedInst->RorM == 0x06) )
         {
             // Direct address
             DecodedInst->Size = 4;
         }
-        else if(ParsedInst.Mod == MEM_MODE_DISP_8)
+        else if(DecodedInst->Mod == MEM_MODE_DISP_8)
         {
             DecodedInst->Size += 1;
         }
-        else if(ParsedInst.Mod == MEM_MODE_DISP_16)
+        else if(DecodedInst->Mod == MEM_MODE_DISP_16)
         {
             DecodedInst->Size += 2;
         }
     }
 
-    ReadRorMField(&ParsedInst, DestBuffer);
-    strncat( DecodedInst->OperandOne, DestBuffer, 
-             (MAX_STRING_LEN - strlen(DecodedInst->OperandOne)) );
+    ReadRorMField(DecodedInst, DestBuffer);
+    strncat( DecodedInst->OperandOneStr, DestBuffer, 
+             (MAX_STRING_LEN - strlen(DecodedInst->OperandOneStr)) );
 
     if(VFlag)
     {
-        strncpy(DecodedInst->OperandTwo, "cl", 2);
+        strncpy(DecodedInst->OperandTwoStr, "cl", 2);
     }
     else
     {
-        strncpy(DecodedInst->OperandTwo, "1", 1);
+        strncpy(DecodedInst->OperandTwoStr, "1", 1);
     }
 }
 
@@ -844,35 +912,38 @@ Group8Decode(struct decoded_inst *DecodedInst)
 void
 Group6Decode(struct decoded_inst *DecodedInst)
 {
-    struct parsed_inst ParsedInst = {0};
+    
     u8 ByteOne = DecodedInst->Binary[0];
     u8 ByteTwo = DecodedInst->Binary[1];
     char RegBuffer[MAX_STRING_LEN] = {0};
     char ImmBuffer[MAX_STRING_LEN] = {0};
 
-    ParsedInst.Binary = DecodedInst->Binary;
-    ParsedInst.Reg = (ByteOne & 0x07);
-    ParsedInst.IsWord = (bool)(ByteOne & 0x08);
+    
+    DecodedInst->Reg = (ByteOne & 0x07);
+    DecodedInst->IsWord = (bool)(ByteOne & 0x08);
     DecodedInst->Size = 2;
 
-    LookUpReg(&ParsedInst, RegBuffer);
+    LookUpReg(DecodedInst, RegBuffer);
     u8 *ImmBits = (DecodedInst->Binary + 1);
 
     bool IsSigned = true;
     bool CareAboutSignExtend = false;
 
-    if(ParsedInst.IsWord)
+    if(DecodedInst->IsWord)
     {
-        DecodedInst->Size += 1;
-        ReadImmField(&ParsedInst, ImmBits, ImmBuffer, CareAboutSignExtend, IsSigned);
+       DecodedInst->Size += 1;
+        ReadImmField(DecodedInst, ImmBits, ImmBuffer, CareAboutSignExtend, IsSigned);
+        DecodedInst->OperandTwo = *(u16 *)ImmBits;
     }
     else
     {
-        ReadImmField(&ParsedInst, ImmBits, ImmBuffer, CareAboutSignExtend, IsSigned);
+        ReadImmField(DecodedInst, ImmBits, ImmBuffer, CareAboutSignExtend, IsSigned);
+        DecodedInst->OperandTwo = *(u8 *)ImmBits;
     }
 
-    strncpy( DecodedInst->OperandOne, RegBuffer, (MAX_STRING_LEN - strlen(RegBuffer)) );
-    strncpy( DecodedInst->OperandTwo, ImmBuffer, (MAX_STRING_LEN - strlen(ImmBuffer)) );
+
+    strncpy( DecodedInst->OperandOneStr, RegBuffer, (MAX_STRING_LEN - strlen(RegBuffer)) );
+    strncpy( DecodedInst->OperandTwoStr, ImmBuffer, (MAX_STRING_LEN - strlen(ImmBuffer)) );
 }
 
 
@@ -898,35 +969,35 @@ Group6Decode(struct decoded_inst *DecodedInst)
 void
 Group5Decode(struct decoded_inst *DecodedInst)
 {
-    struct parsed_inst ParsedInst = {0};
+    
     char *RegPtr = NULLPTR;
     u8 ByteOne = DecodedInst->Binary[0];
     u8 ByteTwo = DecodedInst->Binary[1];
 
-    ParsedInst.Binary = DecodedInst->Binary;
+    
     DecodedInst->Size = 1;
     u8 Top3Bits = (ByteOne & 0xE0);
 
     if( ((DecodedInst->OpcodeEnum == PUSH) || (DecodedInst->OpcodeEnum == POP)) && 
             (Top3Bits == 0) )
     {
-        ParsedInst.Reg = ((ByteOne & 0x18) >> 3);
-        RegPtr = SegRegLUT[ParsedInst.Reg];
+        DecodedInst->Reg = ((ByteOne & 0x18) >> 3);
+        RegPtr = OtherRegLUT[DecodedInst->Reg];
     }
     else 
     {
-        ParsedInst.Reg = (ByteOne & 0x07);
-        RegPtr = WordRegLUT[ParsedInst.Reg];
+        DecodedInst->Reg = (ByteOne & 0x07);
+        RegPtr = WordRegLUT[DecodedInst->Reg];
     }
 
     if(DecodedInst->OpcodeEnum == XCHG)
     {
-        strncpy(DecodedInst->OperandOne, "ax", 2);
-        strncpy(DecodedInst->OperandTwo, RegPtr, 2);
+        strncpy(DecodedInst->OperandOneStr, "ax", 2);
+        strncpy(DecodedInst->OperandTwoStr, RegPtr, 2);
     }
     else
     {
-        strncpy(DecodedInst->OperandOne, RegPtr, 2);
+        strncpy(DecodedInst->OperandOneStr, RegPtr, 2);
     }
 }
 
@@ -940,13 +1011,13 @@ Group4Decode(struct decoded_inst *DecodedInst)
 // ; hex: 05 E8 03
 // ; bin: [0000 0101] [1110 1000] [0000 0011]
 
-    struct parsed_inst ParsedInst = {0};
+    
     char ImmValue[MAX_STRING_LEN] = {0};
     u8 ByteOne = DecodedInst->Binary[0];
     u8 ByteTwo = DecodedInst->Binary[1];
 
-    ParsedInst.Binary = DecodedInst->Binary;
-    ParsedInst.IsWord = (bool)(ByteOne & 0x01);
+    
+    DecodedInst->IsWord = (bool)(ByteOne & 0x01);
 
     DecodedInst->Size = 2;
     u8 *ImmBits = (DecodedInst->Binary + 1);
@@ -954,20 +1025,20 @@ Group4Decode(struct decoded_inst *DecodedInst)
     bool IsSigned = true;
     bool CareAboutSignExtend = false;
 
-    if(ParsedInst.IsWord)
+    if(DecodedInst->IsWord)
     {
         DecodedInst->Size += 1;
         Reg = "ax";
-        ReadImmField(&ParsedInst, ImmBits, ImmValue, CareAboutSignExtend, IsSigned);
+        ReadImmField(DecodedInst, ImmBits, ImmValue, CareAboutSignExtend, IsSigned);
     }
     else
     {
         Reg = "al";
-        ReadImmField(&ParsedInst, ImmBits, ImmValue, CareAboutSignExtend, IsSigned);
+        ReadImmField(DecodedInst, ImmBits, ImmValue, CareAboutSignExtend, IsSigned);
     }
 
-    strncpy(DecodedInst->OperandOne, Reg, 2);
-    strncpy(DecodedInst->OperandTwo, ImmValue, strlen(ImmValue));
+    strncpy(DecodedInst->OperandOneStr, Reg, 2);
+    strncpy(DecodedInst->OperandTwoStr, ImmValue, strlen(ImmValue));
 }
 
 
@@ -984,21 +1055,20 @@ Group3Decode(struct decoded_inst *DecodedInst)
 // ; hex: FE 86 EA 03
 // ; bin: [1111 1110] [1000 0110] [1110 1010] [0000 0011]
 
-    struct parsed_inst ParsedInst = {0};
+    
     char RorMField[MAX_STRING_LEN] = {0};
     u8 ByteOne = DecodedInst->Binary[0];
     u8 ByteTwo = DecodedInst->Binary[1];
 
-    ParsedInst.Binary = DecodedInst->Binary;
-    ParsedInst.IsWord = (bool)(ByteOne & 0x01);
-    ParsedInst.Mod = ((ByteTwo & MOD_FIELD) >> 6);
-    ParsedInst.RorM = (ByteTwo & R_OR_M_FIELD);
+    DecodedInst->IsWord = (bool)(ByteOne & 0x01);
+    DecodedInst->Mod = ((ByteTwo & MOD_FIELD) >> 6);
+    DecodedInst->RorM = (ByteTwo & R_OR_M_FIELD);
 
     DecodedInst->Size = 2;
 
-    if(ParsedInst.Mod != REG_MODE)
+    if(DecodedInst->Mod != REG_MODE)
     {
-        if(ParsedInst.IsWord)
+        if(DecodedInst->IsWord)
         {
             strncat(RorMField, "word ", 5);
         }
@@ -1007,25 +1077,25 @@ Group3Decode(struct decoded_inst *DecodedInst)
             strncat(RorMField, "byte ", 5);
         }
 
-        if( (ParsedInst.Mod == MEM_MODE_NO_DISP) && (ParsedInst.RorM == 0x06) )
+        if( (DecodedInst->Mod == MEM_MODE_NO_DISP) && (DecodedInst->RorM == 0x06) )
         {
             // Direct address
             DecodedInst->Size = 4;
         }
 
-        else if(ParsedInst.Mod == MEM_MODE_DISP_8)
+        else if(DecodedInst->Mod == MEM_MODE_DISP_8)
         {
             DecodedInst->Size += 1;
         }
-        else if(ParsedInst.Mod == MEM_MODE_DISP_16)
+        else if(DecodedInst->Mod == MEM_MODE_DISP_16)
         {
             DecodedInst->Size += 2;
         }
     }
 
-    ReadRorMField(&ParsedInst, RorMField);
+    ReadRorMField(DecodedInst, RorMField);
 
-    strncpy( DecodedInst->OperandOne, RorMField, (MAX_STRING_LEN - strlen(RorMField)) );
+    strncpy( DecodedInst->OperandOneStr, RorMField, (MAX_STRING_LEN - strlen(RorMField)) );
 
 }
 
@@ -1045,23 +1115,21 @@ Group3Decode(struct decoded_inst *DecodedInst)
 void
 Group2Decode(struct decoded_inst *DecodedInst)
 {
-    struct parsed_inst ParsedInst = {0};
     char RorMField[MAX_STRING_LEN] = {0};
     char ImmField[MAX_STRING_LEN] = {0};
     u8 ByteOne = DecodedInst->Binary[0];
     u8 ByteTwo = DecodedInst->Binary[1];
 
-    ParsedInst.Binary = DecodedInst->Binary;
-    ParsedInst.IsWord = (bool)(ByteOne & 0x01);
-    ParsedInst.Mod = ((ByteTwo & MOD_FIELD) >> 6);
-    ParsedInst.RorM = (ByteTwo & R_OR_M_FIELD);
+    DecodedInst->IsWord = (bool)(ByteOne & 0x01);
+    DecodedInst->Mod = ((ByteTwo & MOD_FIELD) >> 6);
+    DecodedInst->RorM = (ByteTwo & R_OR_M_FIELD);
 
     DecodedInst->Size = 3;
 
-    ReadRorMField(&ParsedInst, RorMField);
-    if(ParsedInst.Mod != REG_MODE)
+    ReadRorMField(DecodedInst, RorMField);
+    if(DecodedInst->Mod != REG_MODE)
     {
-        if(ParsedInst.IsWord)
+        if(DecodedInst->IsWord)
         {
             strncat(ImmField, "word ", 5);
             DecodedInst->Size += 1;
@@ -1072,13 +1140,13 @@ Group2Decode(struct decoded_inst *DecodedInst)
         }
     }
 
-    u8 *ImmBits = (ParsedInst.Binary + 2);
-    if(ParsedInst.Mod == MEM_MODE_DISP_8)
+    u8 *ImmBits = (DecodedInst->Binary + 2);
+    if(DecodedInst->Mod == MEM_MODE_DISP_8)
     {
         DecodedInst->Size += 1;
         ImmBits += 1;
     }
-    else if(ParsedInst.Mod == MEM_MODE_DISP_16)
+    else if(DecodedInst->Mod == MEM_MODE_DISP_16)
     {
         DecodedInst->Size += 2;
         ImmBits += 2;
@@ -1159,10 +1227,10 @@ Group2Decode(struct decoded_inst *DecodedInst)
     {
         IsSigned = false;
     }
-    ReadImmField(&ParsedInst, ImmBits, ImmField, CareAboutSignExtend, IsSigned);
+    ReadImmField(DecodedInst, ImmBits, ImmField, CareAboutSignExtend, IsSigned);
 
-    strncpy( DecodedInst->OperandOne, RorMField, (MAX_STRING_LEN - strlen(RorMField)) );
-    strncpy( DecodedInst->OperandTwo, ImmField, (MAX_STRING_LEN - strlen(ImmField)) );
+    strncpy( DecodedInst->OperandOneStr, RorMField, (MAX_STRING_LEN - strlen(RorMField)) );
+    strncpy( DecodedInst->OperandTwoStr, ImmField, (MAX_STRING_LEN - strlen(ImmField)) );
 }
 
 
@@ -1414,4 +1482,207 @@ ReadExtendedOpcode(struct decoded_inst *DecodedInst)
         } break;
     }
 }
+
+inline u8 *
+GetPointerToByteRegister(struct decoded_inst *DecodedInst, union registers *Registers)
+{
+    u8 *TargetByteRegister = NULLPTR;
+    switch(DecodedInst->Reg)
+    {
+        case(AL):
+        {
+            TargetByteRegister = &Registers->AL;
+        } break;
+
+        case(AH):
+        {
+            TargetByteRegister = &Registers->AH;
+        } break;
+
+        case(BL):
+        {
+            TargetByteRegister = &Registers->BL;
+        } break;
+
+        case(BH):
+        {
+            TargetByteRegister = &Registers->BH;
+        } break;
+
+        case(CL):
+        {
+            TargetByteRegister = &Registers->CL;
+        } break;
+
+        case(CH):
+        {
+            TargetByteRegister = &Registers->CH;
+        } break;
+
+        case(DL):
+        {
+            TargetByteRegister = &Registers->DL;
+        } break;
+
+        case(DH):
+        {
+            TargetByteRegister = &Registers->DH;
+        } break;
+
+        default:
+        {
+            Debug_OutputErrorMessage("Couldn't match byte-width register enum to register struct");
+            exit(1);
+        }
+    }
+
+    if(TargetByteRegister)
+    {
+        return(TargetByteRegister);
+    };
+
+    // below is invalid code path
+    Debug_OutputErrorMessage("Couldn't match byte-width register enum to register struct");
+    exit(1);
+}
+
+inline u16 *
+GetPointerToWordRegister(struct decoded_inst *DecodedInst, union registers *Registers)
+{
+    u16 *TargetWordRegister = NULLPTR;
+    switch(DecodedInst->Reg)
+    {
+        case(AX):
+        {
+            TargetWordRegister = &Registers->AX;
+        } break;
+
+        case(BX):
+        {
+            TargetWordRegister = &Registers->BX;
+        } break;
+
+        case(CX):
+        {
+            TargetWordRegister = &Registers->CX;
+        } break;
+
+        case(DX):
+        {
+            TargetWordRegister = &Registers->DX;
+        } break;
+
+        case(SP):
+        {
+            TargetWordRegister = &Registers->SP;
+        } break;
+
+        case(BP):
+        {
+            TargetWordRegister = &Registers->BP;
+        } break;
+
+        case(SI):
+        {
+            TargetWordRegister = &Registers->SI;
+        } break;
+
+        case(DI):
+        {
+            TargetWordRegister = &Registers->DI;
+        } break;
+
+        // todo: enums and registers for IP, flags, segment registers...?
+
+        default:
+        {
+            Debug_OutputErrorMessage("Couldn't match word-width register enum to register struct");
+            exit(1);
+        }
+    }
+
+    if(TargetWordRegister)
+    {
+        return(TargetWordRegister);
+    };
+
+    // below is invalid code path
+    Debug_OutputErrorMessage("Couldn't match word-width register enum to register struct");
+    exit(1);
+}
+
+void
+DoInstruction(struct decoded_inst *DecodedInst, union registers *Registers)
+{
+    union registers OldRegisters = *Registers;
+
+    switch(DecodedInst->DecodeGroup)
+    {
+        case 1:
+        {
+        } break;
+
+        case 2:
+        {
+        } break;
+
+        case 3:
+        {
+        } break;
+
+        case 4:
+        {
+        } break;
+
+        case 5:
+        {
+        } break;
+
+        case 6:
+        { 
+            // stop. next need to write functions for printing register status
+            //      consider adding flags in compilation that will turn off 
+            //      verbose instruction output we used when debugging
+            //      decoder and turn on better output for debugging
+            //      instruction execution
+            if(DecodedInst->IsWord)
+            {
+                u16 *DestinationRegister = GetPointerToWordRegister(DecodedInst, Registers);
+                *DestinationRegister = (u16)DecodedInst->OperandTwo;
+            }
+            else
+            {
+                u8 *DestinationRegister = GetPointerToByteRegister(DecodedInst, Registers);
+
+                // Safe truncate
+                assert(DecodedInst->OperandTwo <= 0xFF);
+
+                u8 TruncatedOperandTwo = (u8)DecodedInst->OperandTwo;
+                *DestinationRegister = TruncatedOperandTwo;
+            }
+        } break;
+
+        case 7:
+        {
+        } break;
+
+        case 8:
+        {
+        } break;
+
+        case 9:
+        {
+        } break;
+
+        default:
+        {
+            // Error
+            Debug_OutputErrorMessage("Couldn't match instruction to DecodeGroup");
+            exit(1);
+        } break;
+    }
+
+    Debug_PrintUpdatedRegisterState(DecodedInst, Registers, &OldRegisters);
+}
+
 
