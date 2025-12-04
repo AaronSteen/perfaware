@@ -1,6 +1,6 @@
-build\
-input\
-old\
+build/*
+input/*
+old/*
 new
 notes.txt
 perfaware-main.zip
