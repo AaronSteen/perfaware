@@ -722,19 +722,39 @@ Group1Decode(struct decoded_inst *DecodedInst)
 
     LookUpReg(DecodedInst, RegField);
     ReadRorMField(DecodedInst, RorMField);
-    
-    DecodedInst->Size = 2;
-    if( (DecodedInst->Mod == MEM_MODE_NO_DISP) && (DecodedInst->RorM == DIRECT_ADDRESS) )
+
+    if(DecodedInst->Mod == REG_MODE)
     {
-        DecodedInst->Size = 4;
+        DecodedInst->Size = 2;
+
+        // set operands to integer reg values for use by DoInstruction function
+        if(DecodedInst->DestFlag)
+        {
+            DecodedInst->OperandOne = (u16)DecodedInst->Reg;
+            DecodedInst->OperandTwo = (u16)DecodedInst->RorM;
+        }
+        else
+        {
+            DecodedInst->OperandTwo = (u16)DecodedInst->Reg;
+            DecodedInst->OperandOne = (u16)DecodedInst->RorM;
+        }
+
+    }
+    else if(DecodedInst->Mod == MEM_MODE_NO_DISP)
+    {
+        DecodedInst->Size = 2;
+        if(DecodedInst->RorM == DIRECT_ADDRESS)
+        {
+            DecodedInst->Size = 4;
+        }
     }
     else if(DecodedInst->Mod == MEM_MODE_DISP_8)
     {
-        DecodedInst->Size += 1;
+        DecodedInst->Size = 3;
     }
     else if(DecodedInst->Mod == MEM_MODE_DISP_16)
     {
-        DecodedInst->Size += 2;
+        DecodedInst->Size = 4;
     }
 
     if(DecodedInst->DestFlag)
@@ -912,7 +932,6 @@ Group8Decode(struct decoded_inst *DecodedInst)
 void
 Group6Decode(struct decoded_inst *DecodedInst)
 {
-    
     u8 ByteOne = DecodedInst->Binary[0];
     u8 ByteTwo = DecodedInst->Binary[1];
     char RegBuffer[MAX_STRING_LEN] = {0};
@@ -920,18 +939,23 @@ Group6Decode(struct decoded_inst *DecodedInst)
 
     
     DecodedInst->Reg = (ByteOne & 0x07);
+    DecodedInst->OperandOne = DecodedInst->Reg;
     DecodedInst->IsWord = (bool)(ByteOne & 0x08);
     DecodedInst->Size = 2;
 
     LookUpReg(DecodedInst, RegBuffer);
     u8 *ImmBits = (DecodedInst->Binary + 1);
 
-    bool IsSigned = true;
+    bool IsSigned = false;
     bool CareAboutSignExtend = false;
+
+    // stop. fix the way we print signed and unsigned values. print the "nicest"
+    //      version; i.e., if the sign bit is set, print signed or unsigned based on which
+    //      has the smaller absolute value.
 
     if(DecodedInst->IsWord)
     {
-       DecodedInst->Size += 1;
+        DecodedInst->Size += 1;
         ReadImmField(DecodedInst, ImmBits, ImmBuffer, CareAboutSignExtend, IsSigned);
         DecodedInst->OperandTwo = *(u16 *)ImmBits;
     }
@@ -940,7 +964,6 @@ Group6Decode(struct decoded_inst *DecodedInst)
         ReadImmField(DecodedInst, ImmBits, ImmBuffer, CareAboutSignExtend, IsSigned);
         DecodedInst->OperandTwo = *(u8 *)ImmBits;
     }
-
 
     strncpy( DecodedInst->OperandOneStr, RegBuffer, (MAX_STRING_LEN - strlen(RegBuffer)) );
     strncpy( DecodedInst->OperandTwoStr, ImmBuffer, (MAX_STRING_LEN - strlen(ImmBuffer)) );
@@ -1484,10 +1507,10 @@ ReadExtendedOpcode(struct decoded_inst *DecodedInst)
 }
 
 inline u8 *
-GetPointerToByteRegister(struct decoded_inst *DecodedInst, union registers *Registers)
+GetPointerToByteRegister(u16 RegisterToLookUp, union registers *Registers)
 {
     u8 *TargetByteRegister = NULLPTR;
-    switch(DecodedInst->Reg)
+    switch(RegisterToLookUp)
     {
         case(AL):
         {
@@ -1547,10 +1570,10 @@ GetPointerToByteRegister(struct decoded_inst *DecodedInst, union registers *Regi
 }
 
 inline u16 *
-GetPointerToWordRegister(struct decoded_inst *DecodedInst, union registers *Registers)
+GetPointerToWordRegister(u16 RegisterToLookUp, union registers *Registers)
 {
     u16 *TargetWordRegister = NULLPTR;
-    switch(DecodedInst->Reg)
+    switch(RegisterToLookUp)
     {
         case(AX):
         {
@@ -1620,6 +1643,55 @@ DoInstruction(struct decoded_inst *DecodedInst, union registers *Registers)
     {
         case 1:
         {
+            // [.... ..dw] [mod reg r/m] [disp-lo] [disp-hi]
+
+            // look up reg
+            // read r/m
+            // if dest flag 
+            //      set op1 as reg field and op2 as r/m
+            // else
+            //      set op2 as reg field and op1 as r/m
+
+            // for now we just handle reg-reg
+            
+            if(DecodedInst->Mod == REG_MODE)
+            {
+                if(DecodedInst->IsWord)
+                {
+                    u16 *DestinationRegister = GetPointerToWordRegister(DecodedInst->OperandOne, Registers);
+                    u16 *SourceRegister = GetPointerToWordRegister(DecodedInst->OperandTwo, Registers);
+                    *DestinationRegister = *SourceRegister;
+                }
+                else
+                {
+                    u8 *DestinationRegister = GetPointerToByteRegister(DecodedInst->OperandOne, Registers);
+                    u8 *SourceRegister = GetPointerToByteRegister(DecodedInst->OperandTwo, Registers);
+                    *DestinationRegister = *SourceRegister;
+                }
+                break;
+            }
+            if(DecodedInst->Mod == MEM_MODE_NO_DISP)
+            {
+
+            }
+
+            else if(DecodedInst->Mod == MEM_MODE_DISP_8)
+            {
+
+            }
+
+            else if(DecodedInst->Mod == MEM_MODE_DISP_16)
+            {
+
+            }
+
+            else
+            {
+                Debug_OutputErrorMessage("Couldn't route Group 1 instruction based on Mod field");
+                exit(1);
+            }
+
+            
         } break;
 
         case 2:
@@ -1640,19 +1712,14 @@ DoInstruction(struct decoded_inst *DecodedInst, union registers *Registers)
 
         case 6:
         { 
-            // stop. next need to write functions for printing register status
-            //      consider adding flags in compilation that will turn off 
-            //      verbose instruction output we used when debugging
-            //      decoder and turn on better output for debugging
-            //      instruction execution
             if(DecodedInst->IsWord)
             {
-                u16 *DestinationRegister = GetPointerToWordRegister(DecodedInst, Registers);
+                u16 *DestinationRegister = GetPointerToWordRegister(DecodedInst->OperandOne, Registers);
                 *DestinationRegister = (u16)DecodedInst->OperandTwo;
             }
             else
             {
-                u8 *DestinationRegister = GetPointerToByteRegister(DecodedInst, Registers);
+                u8 *DestinationRegister = GetPointerToByteRegister(DecodedInst->OperandOne, Registers);
 
                 // Safe truncate
                 assert(DecodedInst->OperandTwo <= 0xFF);

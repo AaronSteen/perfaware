@@ -23,9 +23,6 @@ enum
 };
 
 
-// POP Segment Register
-//      000 reg 111
-//
 u8 ByteOneToDecodeGroupLUT[256] =
 {
     /*00*/ G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G1_RM_REG,   G4_ACC_IMM,  G4_ACC_IMM,  G5_OPREG_NODATA, G5_OPREG_NODATA,
