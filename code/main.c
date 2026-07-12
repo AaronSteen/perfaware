@@ -8,6 +8,11 @@ struct inst_stream InstStream = {0};
 int 
 main(int argc, char **argv)
 {
+    // Clearing a bit example.
+    // u16 i = 0x00FF;
+    // u16 Example = 0x0010;
+    // u16 NotExample = ~Example;
+    // i &= ~0x0010;
     if(argc != 2) 
     { 
         Debug_OutputErrorMessage("Error: Usage"); 
@@ -17,14 +22,13 @@ main(int argc, char **argv)
     LPCSTR FilePath = argv[1]; 
     HANDLE FileHandle = Win32_OpenFile(FilePath); 
     InstStream = Win32_LoadInstStream(FileHandle);
-    u8 *IP = InstStream.Start;
 
     union registers Registers = {0};
 
-    while(IP < InstStream.DoNotCrossThisLine)
+    while(InstStream.Start + Registers.IP < InstStream.DoNotCrossThisLine)
     {
         struct decoded_inst DecodedInst = {0};
-        DecodedInst.Binary = IP;
+        DecodedInst.Binary = (u8 *)InstStream.Start + Registers.IP;
 
         DecodedInst.OpcodeEnum = ByteOneToOpcodeEnumLUT[DecodedInst.Binary[0]];
         if(DecodedInst.OpcodeEnum == EXTENDED)
@@ -90,11 +94,13 @@ main(int argc, char **argv)
             } break;
         }
 
+        union registers OldRegisters = Registers;
+        Registers.IP += DecodedInst.Size;
         DoInstruction(&DecodedInst, &Registers);
 
-        Debug_PrintCurrentStatus(&DecodedInst, InstStream.Idx);
+        Debug_PrintUpdatedRegisterState(&DecodedInst, &Registers, &OldRegisters);
+        // Debug_PrintCurrentStatus(&DecodedInst, InstStream.Idx);
 
-        IP += DecodedInst.Size;
         ++InstStream.Idx;
     }
 

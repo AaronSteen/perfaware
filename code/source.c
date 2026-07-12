@@ -53,36 +53,98 @@ Debug_PrintBinary(u8 Value)
 //     return(WordRegLUT[OctalIndex]);
 // }
 
+#define REGISTER_STATE_BUF_LEN 1024
+
+void
+AppendToRegisterStateBuf(char **Cursor, char *OnePastLast, char *StringToPrint, ...)
+{
+    int SpaceLeft = OnePastLast - 1 - *Cursor;
+    va_list Args;
+    va_start(Args, StringToPrint);
+    int TriedToWrite = vsnprintf(*Cursor, SpaceLeft, StringToPrint, Args);
+    va_end(Args);
+
+    // About vsnprintf.
+    //      It will only print enough characters to leave one space left in the buffer, and then prints the null char.
+    //      However, in the case that it exhausted the buffer, it STILL returns the amount that it would have written, 
+    //      which is extremely dumb and requires us to do a bunch of manual checks
+    if(TriedToWrite >= 0)
+    {
+        if(*Cursor + TriedToWrite + 1 >= OnePastLast)
+        {
+            *Cursor = OnePastLast - 1;
+        }
+        else
+        {
+            *Cursor += TriedToWrite;
+        }
+    }
+}
+
 void
 Debug_PrintUpdatedRegisterState(struct decoded_inst *DecodedInst, union registers *NewRegisters,
                                    union registers *OldRegisters)
 {
-    char RegisterStateBuf[MAX_STRING_LEN];
+    char RegisterStateBuf[REGISTER_STATE_BUF_LEN];
+    char *Cursor = RegisterStateBuf;
+    char *OnePastLast = RegisterStateBuf + REGISTER_STATE_BUF_LEN;
+
     // Print the decoded instruction
-    sprintf_s(RegisterStateBuf, sizeof(RegisterStateBuf), 
-              "%s %s, %s       ; ", 
-              DecodedInst->Mnemonic, DecodedInst->OperandOneStr, DecodedInst->OperandTwoStr);
-    OutputDebugStringA(RegisterStateBuf);
-    bool NeedSpacing = false;
-    for(int i = 0; i < NUMBER_OF_WORD_SIZED_REGISTERS; i++)
+    AppendToRegisterStateBuf(&Cursor, OnePastLast,
+                             "%s %s, %s ; ", 
+                             DecodedInst->Mnemonic, 
+                             DecodedInst->OperandOneStr, DecodedInst->OperandTwoStr);
+
+    // we do all but the last register in this loop because the last register is
+    //       the flags register and we handle it separately below
+    // bool NeedSpacing = false;
+    for(int i = 0; i < NUMBER_OF_WORD_SIZED_REGISTERS - 1; i++)
     {
         if(NewRegisters->WordRegisters[i] != OldRegisters->WordRegisters[i])
         {
-            // map our logical 8086 register layout in memory to the psycho
-            //      8086 octal encoding since they are not the same
             char *RegName = SpecialCombinedWordRegLUT[i];
-            if(NeedSpacing)
-            {
-                OutputDebugStringA("                ; ");
-            }
-            sprintf_s(RegisterStateBuf, sizeof(RegisterStateBuf),
-                      "%8s: 0x%02x->0x%02x\n", 
-                      RegName, OldRegisters->WordRegisters[i], NewRegisters->WordRegisters[i]);
-            OutputDebugStringA(RegisterStateBuf);
-            OutputDebugStringA("\n\n");
-            NeedSpacing = true;
+            // if(NeedSpacing)
+            // {
+            //     AppendToRegisterStateBuf(&Cursor, OnePastLast, " ; ");
+            // }
+            AppendToRegisterStateBuf(&Cursor, OnePastLast, 
+                                     "%8s: 0x%02x->0x%02x ", 
+                                     RegName, 
+                                     OldRegisters->WordRegisters[i], 
+                                     NewRegisters->WordRegisters[i]);
+            // NeedSpacing = true;
         }
     }
+    // flags
+    if(NewRegisters->Flags != OldRegisters->Flags)
+    {
+        AppendToRegisterStateBuf(&Cursor, OnePastLast, "Flags: ");
+        char *Flags[] = {"C", 0, "P", 0, "A", 0, "Z", "S", "T", "I", "D", "O", 0, 0, 0, 0};
+        int NumFlags = 16;
+        for(int i = 0;
+            i < NumFlags;
+            ++i)
+        {
+            int ThisOldFlag = OldRegisters->Flags & (1 << i);
+            if(ThisOldFlag)
+            {
+                AppendToRegisterStateBuf(&Cursor, OnePastLast, "%s", Flags[i]);
+            }
+        }
+        AppendToRegisterStateBuf(&Cursor, OnePastLast, "-> ");
+        for(int i = 0;
+            i < NumFlags;
+            ++i)
+        {
+            int ThisNewFlag = NewRegisters->Flags & (1 << i);
+            if(ThisNewFlag)
+            {
+                AppendToRegisterStateBuf(&Cursor, OnePastLast, "%s", Flags[i]);
+            }
+        }
+    }
+    AppendToRegisterStateBuf(&Cursor, OnePastLast, "\n");
+    OutputDebugStringA(RegisterStateBuf);
 }
 void
 Debug_PrintFinalRegisterState(union registers *Registers)
@@ -90,7 +152,7 @@ Debug_PrintFinalRegisterState(union registers *Registers)
     OutputDebugStringA("Final registers:\n");
 
     char RegisterStateBuf[MAX_STRING_LEN];
-    for(int i = 0; i < NUMBER_OF_WORD_SIZED_REGISTERS; i++)
+    for(int i = 0; i < NUMBER_OF_WORD_SIZED_REGISTERS - 1; i++)
     {
         if(Registers->WordRegisters[i])
         {
@@ -103,6 +165,21 @@ Debug_PrintFinalRegisterState(union registers *Registers)
             OutputDebugStringA("\n\n");
         }
     }
+    OutputDebugStringA("      Flags: ");
+    char *Flags[] = {"C", 0, "P", 0, "A", 0, "Z", "S", "T", "I", "D", "O", 0, 0, 0, 0};
+    int NumFlags = 16;
+    for(int i = 0;
+        i < NumFlags;
+        ++i)
+    {
+        int ThisFlag = Registers->Flags & (1 << i);
+        if(ThisFlag)
+        {
+            sprintf_s(RegisterStateBuf, sizeof(RegisterStateBuf), "%s", Flags[i]);
+            OutputDebugStringA(RegisterStateBuf);
+        }
+    }
+    OutputDebugStringA("\n\n");
 }
 
 void
@@ -709,22 +786,55 @@ DirectAddressMovDecode(struct decoded_inst *DecodedInst)
 void
 Group1Decode(struct decoded_inst *DecodedInst)
 {
-    
+
     char RegField[MAX_STRING_LEN] = {0};
     char RorMField[MAX_STRING_LEN] = {0};
     u8 ByteOne = DecodedInst->Binary[0];
     u8 ByteTwo = DecodedInst->Binary[1];
 
-    
     DecodedInst->DestFlag = (bool)((ByteOne & 0x02) >> 1);
     DecodedInst->IsWord = (bool)(ByteOne & 0x01);
     DecodedInst->Mod = ((ByteTwo & MOD_FIELD) >> 6);
     DecodedInst->Reg = ((ByteTwo & FLEX_FIELD) >> 3);
     DecodedInst->RorM = (ByteTwo & R_OR_M_FIELD);
 
-    LookUpReg(DecodedInst, RegField);
+    // if segment register mov, inst has one of the following bit patterns.
+    //
+    //      First byte is 0x8C
+    //      1 0 0 0    1 1 0 0      MOD 0SR R/M     [disp-lo]   [disp-hi]
+    //
+    //      First byte is 0x8E
+    //      1 0 0 0    1 1 1 0      MOD 0SR R/M     [disp-lo]   [disp-hi]
+    //
+    // we have to treat it as a special case in this if statement below.
+    if(ByteOne == 0x8C || ByteOne == 0x8E)
+    {
+        // For segment register movs, don't look up reg in the normal way. Reg is one of the four segment registers.
+
+        // Bitmask the SR bits (fourth and fifth bits from the left) to 
+        //      get segment register encoding
+        DecodedInst->Reg = ((ByteTwo & 0x18) >> 3);
+        int DoNotOverflow = MAX_STRING_LEN - strlen(RegField);
+        strncat(RegField, OtherRegLUT[DecodedInst->Reg], DoNotOverflow);
+
+        // For segment register movs, the width is always word, even though the W bit is set to 0,
+        //      so it's actually not correct to interpret it as a W bit. So we can't rely on our
+        //      ReadRorMField function to interpret the RorM field. We just set it manually here.
+
+        DecodedInst->IsWord = true;
+        // if(DecodedInst->Mod == REG_MODE)
+        // DoNotOverflow = MAX_STRING_LEN - strlen(RorMField);
+        // strncat(RegField, WordRegLUT[DecodedInst->RorM], DoNotOverflow);
+        // STOP: this is still bugged because even though the "word flag", i.e., the last bit in the first
+        //      byte of the inst, is 0, segment-register movs are always word-size. so we can't use ReadRorMField as we're
+        //      currently doing. think we need to set it manually.
+    }
+    else
+    {
+        LookUpReg(DecodedInst, RegField);
+    }
     ReadRorMField(DecodedInst, RorMField);
-    
+
     DecodedInst->Size = 2;
     if( (DecodedInst->Mod == MEM_MODE_NO_DISP) && (DecodedInst->RorM == DIRECT_ADDRESS) )
     {
@@ -741,11 +851,15 @@ Group1Decode(struct decoded_inst *DecodedInst)
 
     if(DecodedInst->DestFlag)
     {
+        DecodedInst->OperandOne = DecodedInst->Reg;
+        DecodedInst->OperandTwo = DecodedInst->RorM;
         strncpy(DecodedInst->OperandOneStr, RegField, strlen(RegField));
         strncpy(DecodedInst->OperandTwoStr, RorMField, strlen(RorMField));
     }
     else
     {
+        DecodedInst->OperandOne = DecodedInst->RorM;
+        DecodedInst->OperandTwo = DecodedInst->Reg;
         strncpy(DecodedInst->OperandOneStr, RorMField, strlen(RorMField));
         strncpy(DecodedInst->OperandTwoStr, RegField, strlen(RegField));
     }
@@ -1231,6 +1345,11 @@ Group2Decode(struct decoded_inst *DecodedInst)
     }
     ReadImmField(DecodedInst, ImmBits, ImmField, CareAboutSignExtend, IsSigned);
 
+    // this is a hack just for the listing 46 homework, which we know to always use 16 bit values.
+    //      in the case that we really needed this to emulate the 8086, output would always be
+    //      wrong for 8-bit operations.
+    DecodedInst->OperandOne = DecodedInst->RorM;
+    DecodedInst->OperandTwo = *(u16 *)ImmBits;
     strncpy( DecodedInst->OperandOneStr, RorMField, (MAX_STRING_LEN - strlen(RorMField)) );
     strncpy( DecodedInst->OperandTwoStr, ImmField, (MAX_STRING_LEN - strlen(ImmField)) );
 }
@@ -1486,10 +1605,10 @@ ReadExtendedOpcode(struct decoded_inst *DecodedInst)
 }
 
 u8 *
-GetPointerToByteRegister(struct decoded_inst *DecodedInst, union registers *Registers)
+GetPointerToByteRegister(u8 RegisterEnum, union registers *Registers)
 {
     u8 *TargetByteRegister = NULLPTR;
-    switch(DecodedInst->Reg)
+    switch(RegisterEnum)
     {
         case(AL):
         {
@@ -1549,10 +1668,55 @@ GetPointerToByteRegister(struct decoded_inst *DecodedInst, union registers *Regi
 }
 
 u16 *
-GetPointerToWordRegister(struct decoded_inst *DecodedInst, union registers *Registers)
+GetPointerToSegmentRegister(u8 RegisterEnum, union registers *Registers)
 {
     u16 *TargetWordRegister = NULLPTR;
-    switch(DecodedInst->Reg)
+    switch(RegisterEnum)
+    {
+        case(ES):
+            {
+                TargetWordRegister = &Registers->ES;
+            } break;
+
+        case(CS):
+            {
+                TargetWordRegister = &Registers->CS;
+            } break;
+
+        case(SS):
+            {
+                TargetWordRegister = &Registers->SS;
+            } break;
+
+        case(DS):
+            {
+                TargetWordRegister = &Registers->DS;
+            } break;
+
+        default:
+            {
+                Debug_OutputErrorMessage("Couldn't match segment register enum to register");
+                exit(1);
+            }
+    }
+
+    if(TargetWordRegister)
+    {
+        return(TargetWordRegister);
+    };
+
+    // below is invalid code path
+    Debug_OutputErrorMessage("Couldn't match segment register enum to register struct");
+    exit(1);
+}
+
+
+
+u16 *
+GetPointerToWordRegister(u8 RegisterEnum, union registers *Registers)
+{
+    u16 *TargetWordRegister = NULLPTR;
+    switch(RegisterEnum)
     {
         case(AX):
         {
@@ -1614,37 +1778,147 @@ GetPointerToWordRegister(struct decoded_inst *DecodedInst, union registers *Regi
 }
 
 void
+SetArithmeticFlags(u16 Result, u16 *Flags)
+{
+    if(Result == 0)
+    {
+        *Flags |= ZERO_FLAG;
+    }
+    else
+    {
+        *Flags &= ~ZERO_FLAG;
+    }
+    if(Result & (1 << 15))
+    {
+        *Flags |= SIGN_FLAG;
+    }
+    else
+    {
+        *Flags &= ~SIGN_FLAG;
+    }
+}
+
+void
+HandleArithmeticInstruction(struct decoded_inst *DecodedInst, u16 OperandTwo, union registers *Registers)
+{
+    bool ZeroFlag = false;
+    bool SignFlag = false;
+
+    u16 *DestinationRegister = GetPointerToWordRegister(DecodedInst->OperandOne, Registers);
+    switch(DecodedInst->OpcodeEnum)
+    {
+        case ADD:
+        {
+            *DestinationRegister += OperandTwo;
+            SetArithmeticFlags(*DestinationRegister, &Registers->Flags);
+        } break;
+
+        case SUB:
+        {
+            // operand1 = operand1 - operand2 
+            *DestinationRegister -= OperandTwo;
+            SetArithmeticFlags(*DestinationRegister, &Registers->Flags);
+        } break;
+
+        case CMP:
+        {
+            s32 Result = *DestinationRegister - OperandTwo;
+            SetArithmeticFlags(Result, &Registers->Flags);
+        } break;
+    }
+    
+}
+
+void
 DoInstruction(struct decoded_inst *DecodedInst, union registers *Registers)
 {
-    union registers OldRegisters = *Registers;
-
     switch(DecodedInst->DecodeGroup)
     {
         case 1:
         {
-            // [.... ..dw] [mod reg r/m] [disp-lo] [disp-hi]
-            if(DecodedInst->IsWord)
+            if(DecodedInst->OpcodeEnum == MOV)
             {
-                u16 *DestinationRegister = GetPointerToWordRegister(DecodedInst, Registers);
-                *DestinationRegister = (u16)DecodedInst->OperandTwo;
+                // Usually, bit pattern is [.... ..dw] [mod reg r/m] [disp-lo] [disp-hi]
+                // But we have to check to see if it's a segment register mov first, and if so, handle it specially.
+                // if segment register mov, inst has one of the following bit patterns.
+                //
+                //      First byte is 0x8C
+                //      1 0 0 0    1 1 0 0      MOD 0SR R/M     [disp-lo]   [disp-hi]
+                //
+                //      First byte is 0x8E
+                //      1 0 0 0    1 1 1 0      MOD 0SR R/M     [disp-lo]   [disp-hi]
+                if(DecodedInst->Binary[0] == 0x8C || DecodedInst->Binary[0] == 0x8E)
+                {
+                    // Width is always word, not byte
+                    if(DecodedInst->DestFlag)
+                    {
+                        // Dest flag is kind of hard-coded into these instructions. Usually
+                        //      it's the second bit from the right. If first byte is
+                        //      0x8C, that bit is not set, and the segment register
+                        //      is not the destination; the R/M field is.
+
+                        u16 *SourceRegister = GetPointerToWordRegister(DecodedInst->RorM, Registers);
+                        u16 *DestinationRegister = GetPointerToSegmentRegister(DecodedInst->Reg, Registers);
+                        *DestinationRegister = *SourceRegister;
+                    }
+                    else
+                    {
+                        u16 *SourceRegister = GetPointerToSegmentRegister(DecodedInst->Reg, Registers);
+                        u16 *DestinationRegister = GetPointerToWordRegister(DecodedInst->RorM, Registers);
+                        *DestinationRegister = *SourceRegister;
+                    }
+                }
+                else
+                {
+                    // If the register field is the destination
+                    if(DecodedInst->DestFlag)
+                    {
+                        if(DecodedInst->IsWord)
+                        {
+                            u16 *DestinationRegister = GetPointerToWordRegister(DecodedInst->Reg, Registers);
+                            u16 *SourceRegister = GetPointerToWordRegister(DecodedInst->RorM, Registers);
+                            *DestinationRegister = *SourceRegister;
+                        }
+
+                        else
+                        {
+                            u8 *DestinationRegister = GetPointerToByteRegister(DecodedInst->Reg, Registers);
+                            u8 *SourceRegister = GetPointerToByteRegister(DecodedInst->RorM, Registers);
+                            *DestinationRegister = *SourceRegister;
+                        }
+                    }
+
+                    // Else the RorM field is the destination
+                    else
+                    {
+                        if(DecodedInst->IsWord)
+                        {
+                            u16 *DestinationRegister = GetPointerToWordRegister(DecodedInst->RorM, Registers);
+                            u16 *SourceRegister = GetPointerToWordRegister(DecodedInst->Reg, Registers);
+                            *DestinationRegister = *SourceRegister;
+                        }
+
+                        else
+                        {
+                            u8 *DestinationRegister = GetPointerToByteRegister(DecodedInst->RorM, Registers);
+                            u8 *SourceRegister = GetPointerToByteRegister(DecodedInst->Reg, Registers);
+                            *DestinationRegister = *SourceRegister;
+                        }
+                    }
+                }
             }
             else
             {
-                u8 *DestinationRegister = GetPointerToByteRegister(DecodedInst, Registers);
-
-                // Safe truncate
-                assert(DecodedInst->OperandTwo <= 0xFF);
-
-                u8 TruncatedOperandTwo = (u8)DecodedInst->OperandTwo;
-                *DestinationRegister = TruncatedOperandTwo;
-
+                u16 SourceRegisterValue = *GetPointerToWordRegister(DecodedInst->OperandTwo, Registers);
+                HandleArithmeticInstruction(DecodedInst, SourceRegisterValue, Registers);
             }
-
         } break;
 
         case 2:
         {
             // [.... ..sw] or [.... ..dw] [mod <type> r/m] [disp-lo] [disp-hi] [data] [data]
+            u16 ImmValue = DecodedInst->OperandTwo;
+            HandleArithmeticInstruction(DecodedInst, ImmValue, Registers);
         } break;
 
         case 3:
@@ -1668,12 +1942,12 @@ DoInstruction(struct decoded_inst *DecodedInst, union registers *Registers)
 
             if(DecodedInst->IsWord)
             {
-                u16 *DestinationRegister = GetPointerToWordRegister(DecodedInst, Registers);
+                u16 *DestinationRegister = GetPointerToWordRegister(DecodedInst->Reg, Registers);
                 *DestinationRegister = (u16)DecodedInst->OperandTwo;
             }
             else
             {
-                u8 *DestinationRegister = GetPointerToByteRegister(DecodedInst, Registers);
+                u8 *DestinationRegister = GetPointerToByteRegister(DecodedInst->Reg, Registers);
 
                 // Safe truncate
                 assert(DecodedInst->OperandTwo <= 0xFF);
@@ -1705,8 +1979,6 @@ DoInstruction(struct decoded_inst *DecodedInst, union registers *Registers)
             exit(1);
         } break;
     }
-
-    Debug_PrintUpdatedRegisterState(DecodedInst, Registers, &OldRegisters);
 }
 
 

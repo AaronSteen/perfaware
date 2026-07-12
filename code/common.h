@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <assert.h>
 
@@ -11,6 +12,7 @@ typedef uint16_t u16;
 typedef uint32_t u32;
 typedef int8_t s8;
 typedef int16_t s16;
+typedef int32_t s32;
 
 #define NULLPTR (void *)0
 #define MAX_STRING_LEN 255
@@ -74,6 +76,12 @@ union registers
     u16 WordRegisters[NUMBER_OF_WORD_SIZED_REGISTERS];
     u8 ByteRegisters[NUMBER_OF_WORD_SIZED_REGISTERS][2];
 
+};
+
+enum flags
+{
+    ZERO_FLAG = (1 << 6),
+    SIGN_FLAG = (1 << 7)
 };
 
 enum

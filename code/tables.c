@@ -3,8 +3,10 @@ char *ByteRegLUT[] = {"al", "cl", "dl", "bl", "ah", "ch", "dh", "bh"};
 enum {AL, CL, DL, BL, AH, CH, DH, BH};
 char *WordRegLUT[] = {"ax", "cx", "dx", "bx", "sp", "bp", "si", "di"};
 enum {AX, CX, DX, BX, SP, BP, SI, DI};
+enum {ES, CS, SS, DS};
 char *OtherRegLUT[] = {"es", "cs", "ss", "ds", "ip", "flags"};
-char *SpecialCombinedWordRegLUT[] = {"ax", "bx", "cx", "dx", "sp", "bp", "si", "di", "es", "cs", "ss", "ds", "ip", "flags"};
+char *SpecialCombinedWordRegLUT[] = 
+{"ax", "bx", "cx", "dx", "sp", "bp", "si", "di", "es", "cs", "ss", "ds", "ip", "flags"};
 
 
 enum 
