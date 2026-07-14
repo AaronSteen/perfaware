@@ -90,10 +90,48 @@ Debug_PrintUpdatedRegisterState(struct decoded_inst *DecodedInst, union register
     char *OnePastLast = RegisterStateBuf + REGISTER_STATE_BUF_LEN;
 
     // Print the decoded instruction
-    AppendToRegisterStateBuf(&Cursor, OnePastLast,
-                             "%s %s, %s ; ", 
-                             DecodedInst->Mnemonic, 
-                             DecodedInst->OperandOneStr, DecodedInst->OperandTwoStr);
+    if(DecodedInst->DecodeGroup == G10_COND_JUMP)
+    {
+        // Apparently it's the case that if we want to be able to feed this asm output back into NASM
+        //      and get identical machine code, we must declare the point from which we jump
+        //      to be the start of the jump instruction, not the end. This is in spite of the fact that
+        //      the 8086 increments the IP BEFORE the jump happens. So in the case of a
+        //      jne -6:
+        //          The 8086 decodes the instruction and increments the IP to point at the 
+        //                  insruction immediately after the jne -6
+        //
+        //          Then it reads the flag register to determine whether to jump, or execute the
+        //              instruction the IP is currently pointing at (again: it's NOT pointing at
+        //              jne. it's pointing at the instruction following jne.)
+        //
+        //          If its read of the flags requires it to jump, it needs to jump -8 instead of
+        //              -6. This is because jne is two bytes, and so even though the jump,
+        //              as written in assembly, is -6, it must also account for the fact that
+        //              the has IP advanced two additional bytes before the jump is actually executed,
+        //              per above.
+        //
+        //          So, while -6 is what the programmer wrote in assembly, the actual jump distance
+        //              encoded by NASM is -6 + (-2) = -8.
+        //
+        //  Note that in NASM syntax, it's apparently (per Claude) the case that the $ means "the start 
+        //          of the current instruction". So in executing a conditional jump, NASM would
+        //          interpret that as meaning "decrement the IP by 2", since all conditional jumps
+        //          are two bytes in length. Hence we add a dollar sign to our printing output.
+        //
+        //              
+        s16 Jump = DecodedInst->OperandOne + DecodedInst->Size;
+        AppendToRegisterStateBuf(&Cursor, OnePastLast,
+                                 "\n%s $%d ; ", 
+                                 DecodedInst->Mnemonic, 
+                                 Jump);
+    }
+    else
+    {
+        AppendToRegisterStateBuf(&Cursor, OnePastLast,
+                                 "\n%s %s, %s ; ", 
+                                 DecodedInst->Mnemonic, 
+                                 DecodedInst->OperandOneStr, DecodedInst->OperandTwoStr);
+    }
 
     // we do all but the last register in this loop because the last register is
     //       the flags register and we handle it separately below
@@ -143,13 +181,13 @@ Debug_PrintUpdatedRegisterState(struct decoded_inst *DecodedInst, union register
             }
         }
     }
-    AppendToRegisterStateBuf(&Cursor, OnePastLast, "\n");
+    AppendToRegisterStateBuf(&Cursor, OnePastLast, "\n\n");
     OutputDebugStringA(RegisterStateBuf);
 }
 void
 Debug_PrintFinalRegisterState(union registers *Registers)
 {
-    OutputDebugStringA("Final registers:\n");
+    OutputDebugStringA("Final registers:\n\n");
 
     char RegisterStateBuf[MAX_STRING_LEN];
     for(int i = 0; i < NUMBER_OF_WORD_SIZED_REGISTERS - 1; i++)
@@ -928,10 +966,14 @@ Group9Decode(struct decoded_inst *DecodedInst)
         Debug_OutputErrorMessage("No matching decode function in group 9"); 
         exit(1);
     }
+}
 
-        
-
-
+void
+Group10Decode(struct decoded_inst *DecodedInst)
+{
+    s8 Temp = DecodedInst->Binary[1];
+    DecodedInst->OperandOne = Temp;
+    DecodedInst->Size = 2;
 }
 
 
@@ -1307,6 +1349,15 @@ Group2Decode(struct decoded_inst *DecodedInst)
                 //      the function by setting the instruction size to 3,
                 //      written into a destination whose width is 8-bits
                 DecodedInst->Size += 0;
+                
+                // Note in regard to listing 49 and all future 8086 simulation listings:
+                //      It doesn't appear that any listing will ever require us to use this codepath.
+                //      If any listing did require it, we would have to check the 
+                //      DecodedInst->IsWord field inside DoInstruction and treat DecodedInst->OperandTwo
+                //      as an 8-bit value. But until any listing requires that, we don't have a codepath
+                //      for it. 
+                //      
+                //      (7/12/2026)
             } break;
 
             case 0x01: // binary 0000 0001
@@ -1314,14 +1365,18 @@ Group2Decode(struct decoded_inst *DecodedInst)
                 // 16-bit immediate value (instead of 8-bit immediate value above), to be
                 //      written to a destination with a width of 16-bits
                 DecodedInst->Size += 1;
+                DecodedInst->OperandTwo = *(u16 *)ImmBits;
             } break;
 
             case 0x03: // binary 0000 0011
             {
                 // 8-bit immediate value stored in the instruction that must be
                 //      sign-extended when written to the destination. As with case
-                //      0x00, we already account for this at the start of the function
+                //      0x00, we already account for the effect of this on how many bytes
+                //      the instruction comprises at the start of the function
                 DecodedInst->Size += 0;
+                u8 Temp = *ImmBits;
+                DecodedInst->OperandTwo = (u16)Temp;
             } break;
 
             default:
@@ -1334,22 +1389,14 @@ Group2Decode(struct decoded_inst *DecodedInst)
 
             } break;
         }
-        
-
     }
-
     bool IsSigned = true;
     if(CheckIfLogical(DecodedInst->OpcodeEnum))
     {
         IsSigned = false;
     }
     ReadImmField(DecodedInst, ImmBits, ImmField, CareAboutSignExtend, IsSigned);
-
-    // this is a hack just for the listing 46 homework, which we know to always use 16 bit values.
-    //      in the case that we really needed this to emulate the 8086, output would always be
-    //      wrong for 8-bit operations.
     DecodedInst->OperandOne = DecodedInst->RorM;
-    DecodedInst->OperandTwo = *(u16 *)ImmBits;
     strncpy( DecodedInst->OperandOneStr, RorMField, (MAX_STRING_LEN - strlen(RorMField)) );
     strncpy( DecodedInst->OperandTwoStr, ImmField, (MAX_STRING_LEN - strlen(ImmField)) );
 }
@@ -1970,6 +2017,182 @@ DoInstruction(struct decoded_inst *DecodedInst, union registers *Registers)
         case 9:
         {
             // misc
+        } break;
+
+        case 10:
+        {
+            s16 IPOffset = (s16)DecodedInst->OperandOne;
+            u16 Flags = Registers->Flags;
+            bool CarryFlag = ((Flags & CARRY_FLAG) != 0);
+            bool ParityFlag = ((Flags & PARITY_FLAG) != 0);
+            bool AuxiliaryFlag = ((Flags & AUX_FLAG) != 0);
+            bool ZeroFlag = ((Flags & ZERO_FLAG) != 0);
+            bool SignFlag = ((Flags & SIGN_FLAG) != 0);
+            bool TrapFlag = ((Flags & TRAP_FLAG) != 0);
+            bool InterruptFlag = ((Flags & INTERRUPT_FLAG) != 0);
+            bool DirectionFlag = ((Flags & DIRECTION_FLAG) != 0);
+            bool OverflowFlag = ((Flags & OVERFLOW_FLAG) != 0);
+            switch(DecodedInst->OpcodeEnum)
+            {
+                // Above/not below nor equal
+                case JA:
+                {
+                    if((CarryFlag | ZeroFlag) == 0)
+                    {
+                        Registers->IP += IPOffset;
+                    }
+                } break;
+
+                // Above or equal/not below
+                case JNB:
+                {
+                    if(CarryFlag == 0)
+                    {
+                        Registers->IP += IPOffset;
+                    }
+                } break;
+
+                // Below/not above nor equal
+                case JB:
+                {
+                    if(CarryFlag == 1)
+                    {
+                        Registers->IP += IPOffset;
+                    }
+                } break;
+
+                // Below or equal/not above
+                case JBE:
+                {
+                    if((CarryFlag | ZeroFlag) == 1)
+                    {
+                        Registers->IP += IPOffset;
+                    }
+                } break;
+
+                // Carry
+                // case JC:
+                // {
+                //     if(CarryFlag == 1)
+                //     {
+                //         Registers->IP += IPOffset;
+                //     }
+                // } break;
+
+                // Equal/zero
+                case JE:
+                {
+                    if(ZeroFlag == 1)
+                    {
+                        Registers->IP += IPOffset;
+                    }
+                } break;
+
+                // Greater/not less nor equal
+                case JG:
+                {
+                    if(((SignFlag ^ OverflowFlag) | ZeroFlag) == 0)
+                    {
+                        Registers->IP += IPOffset;
+                    }
+                } break;
+
+                // Greater or equal/not less
+                case JNL:
+                {
+                    if((SignFlag ^ OverflowFlag) == 0)
+                    {
+                        Registers->IP += IPOffset;
+                    }
+                } break;
+
+                //Less/not greater nor equal
+                // case JL:
+                // {
+                //     if((SignFlag ^ OverflowFlag) == 1)
+                //     {
+                //         Registers->IP += IPOffset;
+                //     }
+                // } break;
+                //
+                //Less or equal/not greater
+                case JLE:
+                {
+                    if(((SignFlag ^ OverflowFlag) | ZeroFlag) == 1)
+                    {
+                        Registers->IP += IPOffset;
+                    }
+                } break;
+
+                // case JNC:
+                // {
+                //     if(CarryFlag == 0)
+                //     {
+                //         Registers->IP += IPOffset;
+                //     }
+                // } break;
+
+                case JNE:
+                {
+                    if(ZeroFlag == 0)
+                    {
+                        Registers->IP += IPOffset;
+                    }
+                } break;
+
+                case JNO:
+                {
+                    if(OverflowFlag == 0)
+                    {
+                        Registers->IP += IPOffset;
+                    }
+                } break;
+
+                case JNP:
+                {
+                    if(ParityFlag == 0)
+                    {
+                        Registers->IP += IPOffset;
+                    }
+
+                } break;
+
+                case JNS:
+                {
+                    if(SignFlag == 0)
+                    {
+                        Registers->IP += IPOffset;
+                    }
+
+                } break;
+
+                case JO:
+                {
+                    if(OverflowFlag == 1)
+                    {
+                        Registers->IP += IPOffset;
+                    }
+
+                } break;
+
+                case JP:
+                {
+                    if(ParityFlag == 1)
+                    {
+                        Registers->IP += IPOffset;
+                    }
+
+                } break;
+
+                case JS:
+                {
+                    if(SignFlag == 1)
+                    {
+                        Registers->IP += IPOffset;
+                    }
+                } break;
+            }
+
         } break;
 
         default:

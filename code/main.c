@@ -86,6 +86,12 @@ main(int argc, char **argv)
             {
                 Group9Decode(&DecodedInst);
             } break;
+
+            case 10:
+            {
+                Group10Decode(&DecodedInst);
+            } break;
+
             default:
             {
                 // Error

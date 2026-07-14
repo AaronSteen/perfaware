@@ -80,8 +80,15 @@ union registers
 
 enum flags
 {
+    CARRY_FLAG = (1 << 0),
+    PARITY_FLAG = (1 << 2),
+    AUX_FLAG = (1 << 4),
     ZERO_FLAG = (1 << 6),
-    SIGN_FLAG = (1 << 7)
+    SIGN_FLAG = (1 << 7),
+    TRAP_FLAG = (1 << 8),
+    INTERRUPT_FLAG = (1 << 9),
+    DIRECTION_FLAG = (1 << 10),
+    OVERFLOW_FLAG = (1 << 11)
 };
 
 enum
