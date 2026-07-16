@@ -373,7 +373,7 @@ LookUpReg(struct decoded_inst *DecodedInst, char *StrBuffer)
 }
 
 void
-LookUpEffectiveAddress(struct decoded_inst *DecodedInst, char *StrBuffer)
+WriteEffectiveAddressToBuffer(struct decoded_inst *DecodedInst, char *StrBuffer)
 {
     if(DecodedInst->IsWord)
     {
@@ -438,22 +438,32 @@ ReadRorMField(struct decoded_inst *DecodedInst, char *RorMBuffer)
     }
 
     // Else it's a memory operation
+    if(DecodedInst->IsWord)
+    {
+        strncat(RorMBuffer, "word ", 5);
+        DecodedInst->Size += 1;
+    }
+    else
+    {
+        strncat(RorMBuffer, "byte ", 5);
+    }
+
     if(DecodedInst->Mod == MEM_MODE_NO_DISP)
     {
         if(DecodedInst->RorM == DIRECT_ADDRESS)
         {
-            u16 DispBits = *(u16 *)(DecodedInst->Binary + 2);
             strncat(RorMBuffer, "[", MAX_STRING_LEN);
-            GetIntAsString_16(DispBits, RorMBuffer, false);
+            u16 *AddressBits = (u16 *)(DecodedInst->Binary + 2);
+            GetIntAsString_16(*AddressBits, RorMBuffer, false);
         }
         else
         {
-            LookUpEffectiveAddress(DecodedInst, RorMBuffer);
+            WriteEffectiveAddressToBuffer(DecodedInst, RorMBuffer);
         }
     }
     else if(DecodedInst->Mod == MEM_MODE_DISP_8)
     {
-        LookUpEffectiveAddress(DecodedInst, RorMBuffer);
+        WriteEffectiveAddressToBuffer(DecodedInst, RorMBuffer);
         s8 DispBits = *(s8 *)(DecodedInst->Binary + 2);
         if(DispBits != 0)
         {
@@ -478,7 +488,7 @@ ReadRorMField(struct decoded_inst *DecodedInst, char *RorMBuffer)
     }
     else if(DecodedInst->Mod == MEM_MODE_DISP_16)
     {
-        LookUpEffectiveAddress(DecodedInst, RorMBuffer);
+        WriteEffectiveAddressToBuffer(DecodedInst, RorMBuffer);
         s16 DispBits = *(s16 *)(DecodedInst->Binary + 2);
         if(DispBits != 0)
         {
@@ -781,9 +791,18 @@ IsThisALabelInstruction(u8 OpcodeEnum)
     return(false);
 }
 
+bool
+IsDirectAddressInstruction(struct decoded_inst *DecodedInst)
+{
+    return((DecodedInst->Mod == 0) && (DecodedInst->RorM == DIRECT_ADDRESS));
+}
+
+
 void
 DirectAddressMovDecode(struct decoded_inst *DecodedInst)
 {
+    // @Hack. Not sure what this was but we are handling direct address movs that fall into group 2
+    //      within the group2decode function.
     char DirectAddressBuffer[MAX_STRING_LEN] = {0};
     char RegBuffer[MAX_STRING_LEN] = {0};
     u8 ByteOne = DecodedInst->Binary[0];
@@ -824,7 +843,6 @@ DirectAddressMovDecode(struct decoded_inst *DecodedInst)
 void
 Group1Decode(struct decoded_inst *DecodedInst)
 {
-
     char RegField[MAX_STRING_LEN] = {0};
     char RorMField[MAX_STRING_LEN] = {0};
     u8 ByteOne = DecodedInst->Binary[0];
@@ -863,9 +881,6 @@ Group1Decode(struct decoded_inst *DecodedInst)
         // if(DecodedInst->Mod == REG_MODE)
         // DoNotOverflow = MAX_STRING_LEN - strlen(RorMField);
         // strncat(RegField, WordRegLUT[DecodedInst->RorM], DoNotOverflow);
-        // STOP: this is still bugged because even though the "word flag", i.e., the last bit in the first
-        //      byte of the inst, is 0, segment-register movs are always word-size. so we can't use ReadRorMField as we're
-        //      currently doing. think we need to set it manually.
     }
     else
     {
@@ -887,19 +902,41 @@ Group1Decode(struct decoded_inst *DecodedInst)
         DecodedInst->Size += 2;
     }
 
-    if(DecodedInst->DestFlag)
+    if(IsDirectAddressInstruction(DecodedInst))
     {
-        DecodedInst->OperandOne = DecodedInst->Reg;
-        DecodedInst->OperandTwo = DecodedInst->RorM;
-        strncpy(DecodedInst->OperandOneStr, RegField, strlen(RegField));
-        strncpy(DecodedInst->OperandTwoStr, RorMField, strlen(RorMField));
+        u16 *AddressBits = (u16 *)(DecodedInst->Binary + 2);
+        if(DecodedInst->DestFlag)
+        {
+            DecodedInst->OperandOne = DecodedInst->Reg;
+            DecodedInst->OperandTwo = *AddressBits;
+            strncpy(DecodedInst->OperandOneStr, RegField, strlen(RegField));
+            strncpy(DecodedInst->OperandTwoStr, RorMField, strlen(RorMField));
+        }
+        else
+        {
+            DecodedInst->OperandOne = *AddressBits;            
+            DecodedInst->OperandTwo = DecodedInst->Reg;        
+            strncpy(DecodedInst->OperandOneStr, RorMField, strlen(RorMField));
+            strncpy(DecodedInst->OperandTwoStr, RegField, strlen(RegField));
+        }
+
     }
     else
     {
-        DecodedInst->OperandOne = DecodedInst->RorM;
-        DecodedInst->OperandTwo = DecodedInst->Reg;
-        strncpy(DecodedInst->OperandOneStr, RorMField, strlen(RorMField));
-        strncpy(DecodedInst->OperandTwoStr, RegField, strlen(RegField));
+        if(DecodedInst->DestFlag)
+        {
+            DecodedInst->OperandOne = DecodedInst->Reg;
+            DecodedInst->OperandTwo = DecodedInst->RorM;
+            strncpy(DecodedInst->OperandOneStr, RegField, strlen(RegField));
+            strncpy(DecodedInst->OperandTwoStr, RorMField, strlen(RorMField));
+        }
+        else
+        {
+            DecodedInst->OperandOne = DecodedInst->RorM;
+            DecodedInst->OperandTwo = DecodedInst->Reg;
+            strncpy(DecodedInst->OperandOneStr, RorMField, strlen(RorMField));
+            strncpy(DecodedInst->OperandTwoStr, RegField, strlen(RegField));
+        }
     }
 }
 
@@ -1256,7 +1293,8 @@ Group3Decode(struct decoded_inst *DecodedInst)
     strncpy( DecodedInst->OperandOneStr, RorMField, (MAX_STRING_LEN - strlen(RorMField)) );
 
 }
-
+// Mov or arithmetic with immediate value.
+//
 // if arithmetic:
 //
 //     2 bytes for instruction: [opcode sw] [mod <type> r/m] 
@@ -1273,6 +1311,7 @@ Group3Decode(struct decoded_inst *DecodedInst)
 void
 Group2Decode(struct decoded_inst *DecodedInst)
 {
+    // [.... ..sw] or [.... ..dw] [mod <type> r/m] [disp-lo] [disp-hi] [data] [data]
     char RorMField[MAX_STRING_LEN] = {0};
     char ImmField[MAX_STRING_LEN] = {0};
     u8 ByteOne = DecodedInst->Binary[0];
@@ -1281,34 +1320,53 @@ Group2Decode(struct decoded_inst *DecodedInst)
     DecodedInst->IsWord = (bool)(ByteOne & 0x01);
     DecodedInst->Mod = ((ByteTwo & MOD_FIELD) >> 6);
     DecodedInst->RorM = (ByteTwo & R_OR_M_FIELD);
-
     DecodedInst->Size = 3;
 
-    ReadRorMField(DecodedInst, RorMField);
-    if(DecodedInst->Mod != REG_MODE)
+    u8 *ImmBits = (DecodedInst->Binary + 2);
+
+
+    if((DecodedInst->Mod != REG_MODE))
     {
-        if(DecodedInst->IsWord)
+        if(DecodedInst->RorM == DIRECT_ADDRESS)
         {
-            strncat(ImmField, "word ", 5);
-            DecodedInst->Size += 1;
-        }
-        else
-        {
-            strncat(ImmField, "byte ", 5);
+            // this is a hack at this point. we need to set ImmBits to point at the fourth
+            //      byte of the instruction, given that in direct address mode, the bytes
+            //      go as follows:
+            //          byte 1: opcode
+            //          byte 2: mod, r/m etc.
+            //          byte 3: direct address high byte
+            //          byte 4: direct address low byte
+            //          byte 5: immediate value byte 1
+            //          byte 6: immediate value byte 2
+            //
+            // but we can't set it in ReadRorMField because we don't pass the ImmBits pointer,
+            //      and we don't want to because no other codepath in ReadRorMField uses it...
+            //
+            // re: Size, since this is a hack and we know we will only be handling
+            //      word-width instructions, we can safely set it to 6 here.
+            ImmBits += 2;
+            DecodedInst->Size = 6;
         }
     }
 
-    u8 *ImmBits = (DecodedInst->Binary + 2);
-    if(DecodedInst->Mod == MEM_MODE_DISP_8)
+    if(DecodedInst->Mod == MEM_MODE_NO_DISP)
+    {
+        DecodedInst->Displacement = 0;
+    }
+    else if(DecodedInst->Mod == MEM_MODE_DISP_8)
     {
         DecodedInst->Size += 1;
         ImmBits += 1;
+        DecodedInst->Displacement = *(s8 *)(DecodedInst->Binary + 2);
     }
     else if(DecodedInst->Mod == MEM_MODE_DISP_16)
     {
         DecodedInst->Size += 2;
         ImmBits += 2;
+        DecodedInst->Displacement = *(s16 *)(DecodedInst->Binary + 2);
     }
+
+    ReadRorMField(DecodedInst, RorMField);
 
     bool CareAboutSignExtend;
     if ( (CareAboutSignExtend = CheckIfArithmetic(DecodedInst->OpcodeEnum)) )
@@ -1344,50 +1402,50 @@ Group2Decode(struct decoded_inst *DecodedInst)
         switch(SWBits)
         {
             case 0x00: // binary 0000 0000
-            {
-                // 8-bit immediate value, which we already account for at the top of
-                //      the function by setting the instruction size to 3,
-                //      written into a destination whose width is 8-bits
-                DecodedInst->Size += 0;
-                
-                // Note in regard to listing 49 and all future 8086 simulation listings:
-                //      It doesn't appear that any listing will ever require us to use this codepath.
-                //      If any listing did require it, we would have to check the 
-                //      DecodedInst->IsWord field inside DoInstruction and treat DecodedInst->OperandTwo
-                //      as an 8-bit value. But until any listing requires that, we don't have a codepath
-                //      for it. 
-                //      
-                //      (7/12/2026)
-            } break;
+                {
+                    // 8-bit immediate value, which we already account for at the top of
+                    //      the function by setting the instruction size to 3,
+                    //      written into a destination whose width is 8-bits
+                    DecodedInst->Size += 0;
+
+                    // Note in regard to listing 49 and all future 8086 simulation listings:
+                    //      It doesn't appear that any listing will ever require us to use this codepath.
+                    //      If any listing did require it, we would have to check the 
+                    //      DecodedInst->IsWord field inside DoInstruction and treat DecodedInst->OperandTwo
+                    //      as an 8-bit value. But until any listing requires that, we don't have a codepath
+                    //      for it. 
+                    //      
+                    //      (7/12/2026)
+                } break;
 
             case 0x01: // binary 0000 0001
-            {
-                // 16-bit immediate value (instead of 8-bit immediate value above), to be
-                //      written to a destination with a width of 16-bits
-                DecodedInst->Size += 1;
-                DecodedInst->OperandTwo = *(u16 *)ImmBits;
-            } break;
+                {
+                    // 16-bit immediate value (instead of 8-bit immediate value above), to be
+                    //      written to a destination with a width of 16-bits
+                    DecodedInst->Size += 1;
+                    DecodedInst->OperandTwo = *(u16 *)ImmBits;
+                } break;
 
             case 0x03: // binary 0000 0011
-            {
-                // 8-bit immediate value stored in the instruction that must be
-                //      sign-extended when written to the destination. As with case
-                //      0x00, we already account for the effect of this on how many bytes
-                //      the instruction comprises at the start of the function
-                DecodedInst->Size += 0;
-                u8 Temp = *ImmBits;
-                DecodedInst->OperandTwo = (u16)Temp;
-            } break;
+                {
+                    // 8-bit immediate value stored in the instruction that must be
+                    //      sign-extended when written to the destination. As with case
+                    //      0x00, we already account for the effect of this on how many bytes
+                    //      the instruction comprises at the start of the function
+                    DecodedInst->Size += 0;
+                    u8 Temp = *ImmBits;
+                    DecodedInst->OperandTwo = (u16)Temp;
+                } break;
 
             default:
-            {
-                // We'd hit this block if the S bit was set and the W bit was not, which is
-                //      nonsensical: we wouldn't sign extend a value to be 16 bits if 
-                //      we were writing it into an 8-bit register.
-                Debug_OutputErrorMessage("Invalid SW bits combination for arithmetic instruction");
-                exit(1);
+                {
+                    // We'd hit this block if the S bit was set and the W bit was not, which is
+                    //      nonsensical: we wouldn't sign extend a value to be 16 bits if 
+                    //      we were writing it into an 8-bit register.
+                    Debug_OutputErrorMessage("Invalid SW bits combination for arithmetic instruction");
+                    exit(1);
 
-            } break;
+                } break;
         }
     }
     bool IsSigned = true;
@@ -1396,13 +1454,18 @@ Group2Decode(struct decoded_inst *DecodedInst)
         IsSigned = false;
     }
     ReadImmField(DecodedInst, ImmBits, ImmField, CareAboutSignExtend, IsSigned);
-    DecodedInst->OperandOne = DecodedInst->RorM;
+    if(IsDirectAddressInstruction(DecodedInst))
+    {
+        DecodedInst->OperandOne = *(u16 *)(DecodedInst->Binary + 2);
+    }
+    else
+    {
+        DecodedInst->OperandOne = DecodedInst->RorM;
+    }
+
     strncpy( DecodedInst->OperandOneStr, RorMField, (MAX_STRING_LEN - strlen(RorMField)) );
     strncpy( DecodedInst->OperandTwoStr, ImmField, (MAX_STRING_LEN - strlen(ImmField)) );
 }
-
-
-
 
 void
 ReadExtendedOpcode(struct decoded_inst *DecodedInst)
@@ -1869,6 +1932,10 @@ HandleArithmeticInstruction(struct decoded_inst *DecodedInst, u16 OperandTwo, un
 
         case CMP:
         {
+            // Compare subtracts source from destination; flags are updated and can be tested
+            //      by subsequent conditional jump instruction (manual page 2-36)
+            //  
+            //  (Here OperandTwo is the source)
             s32 Result = *DestinationRegister - OperandTwo;
             SetArithmeticFlags(Result, &Registers->Flags);
         } break;
@@ -1876,8 +1943,80 @@ HandleArithmeticInstruction(struct decoded_inst *DecodedInst, u16 OperandTwo, un
     
 }
 
+u16 
+GetEffectiveAddress(struct decoded_inst *DecodedInst, union registers *Registers)
+{
+    // R/M:
+    //      000 = 0
+    //      001 = 1
+    //      010 = 2
+    //      011 = 3
+    //      100 = 4
+    //      101 = 5
+    //      110 = 6. Direct Address; not handled by this function
+    //      111 = 7
+
+    u16 ToReturn = 0;
+    switch(DecodedInst->RorM)
+    {
+        case 0:
+            {
+                ToReturn = Registers->BX + Registers->SI + DecodedInst->Displacement;
+                return(ToReturn);
+            } break;
+
+        case 1:
+            {
+                ToReturn = Registers->BX + Registers->DI + DecodedInst->Displacement;
+                return(ToReturn);
+            } break;
+
+        case 2:
+            {
+                ToReturn = Registers->BP + Registers->SI + DecodedInst->Displacement;
+                return(ToReturn);
+            } break;
+
+        case 3:
+            {
+                ToReturn = Registers->BP + Registers->DI + DecodedInst->Displacement;
+                return(ToReturn);
+            } break;
+
+        case 4:
+            {
+                ToReturn = Registers->SI + DecodedInst->Displacement;
+                return(ToReturn);
+            } break;
+
+        case 5:
+            {
+                ToReturn = Registers->DI + DecodedInst->Displacement;
+                return(ToReturn);
+            } break;
+
+        case 6:
+            {
+                // Invalid codepath
+                return(ToReturn);
+            } break;
+
+        case 7:
+            {
+                ToReturn = Registers->BX + DecodedInst->Displacement;
+                return(ToReturn);
+            } break;
+
+        default:
+            {
+                // Error
+                return(ToReturn);
+            } break;
+    }
+}
+
 void
-DoInstruction(struct decoded_inst *DecodedInst, union registers *Registers)
+DoInstruction(struct decoded_inst *DecodedInst, union registers *Registers, u8 *Memory)
 {
     switch(DecodedInst->DecodeGroup)
     {
@@ -1894,6 +2033,9 @@ DoInstruction(struct decoded_inst *DecodedInst, union registers *Registers)
                 //
                 //      First byte is 0x8E
                 //      1 0 0 0    1 1 1 0      MOD 0SR R/M     [disp-lo]   [disp-hi]
+                //
+
+                // Segment register movs
                 if(DecodedInst->Binary[0] == 0x8C || DecodedInst->Binary[0] == 0x8E)
                 {
                     // Width is always word, not byte
@@ -1915,45 +2057,53 @@ DoInstruction(struct decoded_inst *DecodedInst, union registers *Registers)
                         *DestinationRegister = *SourceRegister;
                     }
                 }
-                else
+
+                else if(IsDirectAddressInstruction(DecodedInst))
                 {
-                    // If the register field is the destination
                     if(DecodedInst->DestFlag)
                     {
-                        if(DecodedInst->IsWord)
-                        {
-                            u16 *DestinationRegister = GetPointerToWordRegister(DecodedInst->Reg, Registers);
-                            u16 *SourceRegister = GetPointerToWordRegister(DecodedInst->RorM, Registers);
-                            *DestinationRegister = *SourceRegister;
-                        }
-
-                        else
-                        {
-                            u8 *DestinationRegister = GetPointerToByteRegister(DecodedInst->Reg, Registers);
-                            u8 *SourceRegister = GetPointerToByteRegister(DecodedInst->RorM, Registers);
-                            *DestinationRegister = *SourceRegister;
-                        }
+                        u16 *DestinationRegister = GetPointerToWordRegister(DecodedInst->OperandOne, Registers);
+                        u16 *FetchAddress = (u16 *)(Memory + DecodedInst->OperandTwo);
+                        u16 ValueToStore = *FetchAddress;
+                        *DestinationRegister = ValueToStore;
                     }
-
-                    // Else the RorM field is the destination
                     else
                     {
-                        if(DecodedInst->IsWord)
-                        {
-                            u16 *DestinationRegister = GetPointerToWordRegister(DecodedInst->RorM, Registers);
-                            u16 *SourceRegister = GetPointerToWordRegister(DecodedInst->Reg, Registers);
-                            *DestinationRegister = *SourceRegister;
-                        }
+                        u16 *DestinationAddress = (u16 *)(Memory + DecodedInst->OperandOne);
+                        u16 *SourceRegister = GetPointerToWordRegister(DecodedInst->OperandTwo, Registers);
+                        u16 ValueToStore = *SourceRegister;
+                        *DestinationAddress = ValueToStore;
+                    }
+                }
 
-                        else
-                        {
-                            u8 *DestinationRegister = GetPointerToByteRegister(DecodedInst->RorM, Registers);
-                            u8 *SourceRegister = GetPointerToByteRegister(DecodedInst->Reg, Registers);
-                            *DestinationRegister = *SourceRegister;
-                        }
+                // Register to register movs
+                else if(DecodedInst->Mod == REG_MODE)
+                {
+                    u16 *DestinationRegister = GetPointerToWordRegister(DecodedInst->OperandOne, Registers);
+                    u16 *SourceRegister = GetPointerToWordRegister(DecodedInst->OperandTwo, Registers); 
+                    *DestinationRegister = *SourceRegister;
+                }
+
+                // Memory movs
+                else
+                {
+                    u16 MemoryOffset = GetEffectiveAddress(DecodedInst, Registers);
+                    u16 *MemoryAddress = (u16 *)(Memory + MemoryOffset);
+                    if(DecodedInst->DestFlag)
+                    {
+                        u16 *DestinationRegister = GetPointerToWordRegister(DecodedInst->OperandOne, Registers);
+                        u16 FetchedValue = *MemoryAddress;
+                        *DestinationRegister = FetchedValue;
+                    }
+                    else
+                    {
+                        u16 *SourceRegister = GetPointerToWordRegister(DecodedInst->OperandTwo, Registers);
+                        u16 ValueToWrite = *SourceRegister;
+                        *MemoryAddress = ValueToWrite;
                     }
                 }
             }
+            // Group 1 arithmetic instructions
             else
             {
                 u16 SourceRegisterValue = *GetPointerToWordRegister(DecodedInst->OperandTwo, Registers);
@@ -1964,8 +2114,29 @@ DoInstruction(struct decoded_inst *DecodedInst, union registers *Registers)
         case 2:
         {
             // [.... ..sw] or [.... ..dw] [mod <type> r/m] [disp-lo] [disp-hi] [data] [data]
-            u16 ImmValue = DecodedInst->OperandTwo;
-            HandleArithmeticInstruction(DecodedInst, ImmValue, Registers);
+            //
+            // We can know that Operand One is the destination here because this is an immediate instruction;
+            //      Operand Two is always the immediate value
+            if(DecodedInst->OpcodeEnum == MOV)
+            {
+                if(IsDirectAddressInstruction(DecodedInst))
+                {
+                    *(Memory + DecodedInst->OperandOne) = DecodedInst->OperandTwo;
+                }
+                else
+                {
+                    if(DecodedInst->Mod != REG_MODE)
+                    {
+                        u16 EffectiveAddress = GetEffectiveAddress(DecodedInst, Registers);
+                        *(Memory + EffectiveAddress) = DecodedInst->OperandTwo;
+                    }
+                }
+            }
+            else
+            {
+                u16 ImmValue = DecodedInst->OperandTwo;
+                HandleArithmeticInstruction(DecodedInst, ImmValue, Registers);
+            }
         } break;
 
         case 3:

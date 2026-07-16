@@ -42,6 +42,7 @@ struct decoded_inst
     char OperandOneStr[MAX_STRING_LEN];
     char OperandTwoStr[MAX_STRING_LEN];
     u16 OperandOne;
+    s16 Displacement;
     u16 OperandTwo;
 };
 
@@ -50,6 +51,7 @@ union registers
 {
     struct
     {
+        // General-purpose registers
         union 
         {
             u16 AX; struct { u8 AL, AH; };
@@ -70,6 +72,15 @@ union registers
             u16 DX; struct { u8 DL, DH; };   
         };
 
+        // SP = stack pointer
+        // BP = base pointer
+        // SI = source index; "stores the offset address of the source in string manipulation functions"
+        // DI = destination index; "stores the offset address of the destination in string manipulation functions"
+        //
+        // ES = extra segment
+        // CS = code segment
+        // SS = stack segment
+        // DS = data segment
         u16 SP, BP, SI, DI, ES, CS, SS, DS, IP, Flags;
     };
 

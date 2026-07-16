@@ -9,7 +9,7 @@ char *SpecialCombinedWordRegLUT[] =
 {"ax", "bx", "cx", "dx", "sp", "bp", "si", "di", "es", "cs", "ss", "ds", "ip", "flags"};
 
 
-enum 
+enum groups
 {
     G1_RM_REG = 1,   // [.... ..dw] [mod reg r/m] [disp-lo] [disp-hi]
     G2_IMM_RM,       // [.... ..sw] or [.... ..dw] [mod <type> r/m] [disp-lo] [disp-hi] [data] [data]

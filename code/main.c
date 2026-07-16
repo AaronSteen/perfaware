@@ -8,11 +8,6 @@ struct inst_stream InstStream = {0};
 int 
 main(int argc, char **argv)
 {
-    // Clearing a bit example.
-    // u16 i = 0x00FF;
-    // u16 Example = 0x0010;
-    // u16 NotExample = ~Example;
-    // i &= ~0x0010;
     if(argc != 2) 
     { 
         Debug_OutputErrorMessage("Error: Usage"); 
@@ -24,6 +19,14 @@ main(int argc, char **argv)
     InstStream = Win32_LoadInstStream(FileHandle);
 
     union registers Registers = {0};
+
+    HANDLE HeapHandle = GetProcessHeap();
+    u8 *Memory;
+    if(HeapHandle)
+    {
+        Memory = (u8 *)HeapAlloc(HeapHandle, HEAP_ZERO_MEMORY, 1024 * 1024);
+        assert(Memory != NULL);
+    }
 
     while(InstStream.Start + Registers.IP < InstStream.DoNotCrossThisLine)
     {
@@ -102,7 +105,7 @@ main(int argc, char **argv)
 
         union registers OldRegisters = Registers;
         Registers.IP += DecodedInst.Size;
-        DoInstruction(&DecodedInst, &Registers);
+        DoInstruction(&DecodedInst, &Registers, Memory);
 
         Debug_PrintUpdatedRegisterState(&DecodedInst, &Registers, &OldRegisters);
         // Debug_PrintCurrentStatus(&DecodedInst, InstStream.Idx);
