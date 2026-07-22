@@ -11,3 +11,11 @@ referencerepo/*
 *temp*
 input/*
 old/*
+referencerepo/
+build/
+*.pdb
+*.exe
+*.rdbg
+*.data
+*.cache/
+*.zip

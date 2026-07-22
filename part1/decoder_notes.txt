@@ -1,0 +1,107 @@
+I'm recently jumping back into the course after taking a break to spend more time with Handmade Hero and drink huge quantities of almond milk. In trying to understand the decoder I finished just before my break, I ended up writing a bunch of notes. I'm just sharing what I wrote here for posterity; maybe someone's brain works like mine and this will be useful.
+
+I made the decision up front to not look at Casey's reference decoder in advance and instead write a naive implementation just following my instincts. The idea was that in comparing the completed version with a professional job (although Casey emphasizes in his code that it's deliberately not performant), I'd realize where my instincts were wrong. 
+
+I remember printing out all of the instruction tables, spreading them out on the floor, and trying to identify what might be some common codepaths to which to route them. And I remember thinking that it was important to do this for performance reasons, haha. That is, I really wanted to determine as efficiently as possible how to interpret the different flags and fields an instruction comprises. What I believe now is that it's good for me to be in this course, because I made major decisions to6ward that end that ultimately made the resulting program less flexible, to the point that it never fully handled the completionist assignment, as I wanted it to. 
+
+If you have watched and rewatched the first ~50 episodes of HMH like me, you'll hear this repeated constantly: Nascent programs are, by nature, in an exploratory phase, and the codebase should reflect that. An abstraction may feel intellectually satisfying, but given that there's a nonzero chance the abstraction won't appear in the completed program, or be rewritten many times along the way, implementing it is almost certainly a waste of time. And in the case that it was dropped or rewritten many times along the way, disentangling it from the codebase is virtually guaranteed to have been a headache.
+
+Poring over those tables on the living room floor, I ended up classifying each instruction as a member of one of nine "groups" based on their bit pattern. Decoding amounted to reading the first byte of the instruction, which often (but, sadly, not always) determines the opcode, then routing it to one of nine decoding functions. In all cases, my description of an instruction's mechanisms are my own interpretation, which simply represents an attempt to rationalize the immense complexity of the instruction spec in the manual; the resulting scheme may have zero overlap with how the 8086 interprets the bits. And my interpretation may, of course, also be wrong. Standard disclaimer, etc. Nevertheless, I was ultimately able to decode the majority of the completionist assignment. These are the groups:
+
+Group 1: Get a value in memory or in a register, do something to it, and store the result in memory or in a register.
+Bit pattern: [.... ..dw] [mod reg r/m] [disp-lo] [disp-hi]
+Notes: Operands are a register field, a "mod" field, and a register/memory field (r/m) whose value is determined by interpreting the mod field. r/m is either a register or some memory address. In the case that it's a memory address, the instruction may contain up to two bytes that represent an offset from that memory address; the mod field additionally determines this. Read the D (destination) flag in the first byte of the instruction to determine whether reg or r/m is the destination; read the W (width) flag to determine, for example, whether we want 8 or 16 bits from memory (someone writing the assembly would indicate as such with "byte" or "word"), whether we're storing the value in an 8 or 16-bit register, etc. 
+Examples: Movs and arithmetic instructions that don't use immediate values; operands are instead in either a register or in memory. 
+
+Group 2: Move or do math with an immediate value.
+Bit pattern: [.... ..sw] or [.... ..dw] [mod <type> r/m] [disp-lo] [disp-hi] [data] [data]
+Notes: Several groups share a bit pattern because they are superficially similar: In this case, we consider those whose operands are r/m and an immediate value ("[data]"). The type field is read to determine what the opcode actually is. r/m indicates where to store the result; e.g., move this immediate value into a register or subtract this immediate value from the value in the given memory address. Read mod to determine r/m's value. When r/m, the W flag determines whether one or two bytes are to be written to memory. There's a sign bit that can be set and interpreted in conjunction with the W bit in the case that we want to sign-extend an 8-bit value and store it in 16 bits.
+Examples: Movs and arithmetic instructions that use an immediate value.
+
+Group 3: Do something to the value at the location specified by r/m.
+Bit pattern: [.... ...w] [mod <type> r/m] [disp-lo] [disp-hi]
+Notes: Only one operand: an r/m field. As ever, read mod to determine whether r/m is register or a memory address; memory addresses may be offset by an 8 or 16-bit value. 
+Examples: Increment the value in AX; push the value at [memory address stored in register BP offset by 24 bytes] onto the stack.
+
+Group 4: Do something with an immediate value and the contents of the accumulator.
+Bit pattern: [.... ...w] [data] [data]
+Notes: Delightfully simple instructions that need only specify an immediate value and do not require any interpretation to determine the destination because it is always the accumulator. The W bit determines whether the immediate value is 8 or 16 bits, and whether we reference only the bottom byte (AL) or the full width (AX) of the accumulator.
+Examples: Add this value to the accumulator; XOR this value with the accumulator and store the result there.
+
+Group 5: Do something with a value in a register; the thing we do doesn't need a second operand.
+Bit pattern: [.... .reg]
+Notes: None because examples suffice; wonderful...
+Examples: Push the value in cx onto the stack. xchg uses this pattern for cases where second register involved in the exchange is AX; this is assumed and obviates the need to specify AX.
+
+Group 6: Move an immediate value into a register.
+Bit pattern: [.... w reg] [data] [data]
+Examples: Move the value 12 into the dx register to upgrade your computer to DirectX 12
+
+Group 7: One byte instructions that require no interpretation beyond reading the opcode.
+Bit pattern: [opcode]
+Examples: wait, lock, halt...
+
+Group 8: Rotate or shift instructions.
+Bit pattern: [.... ..vw] [mod ... r/m] [disp-lo] [disp-hi]
+Notes: V flag is 0 if shift or rotate happens once. If 1, it happens x times, where x is the value in register cl. 
+Examples: Rotate the value in bp to the right three times.
+
+Group 9: Where my scheme falls apart; basically a catch-all for instructions whose interpretation could not be easily classified, so no bit pattern. My function for this is just a big if statement that routes to bespoke decoding functions.
+Examples: The I/O functions IN and OUT; CALL; JMP; several others...
+
+A constant thorn in my side when writing this was that there are a large number of instructions whose identity cannot be determined by reading the first byte. I like to imagine that ARM just lets you look at the first byte. I do not verify this because it's simply more pleasant not to do so: to daydream, of sundrenched alpine meadows, which sway with wildflowers and bustle with harmless bees and dancing butterflies...for every instruction, I essentially try to route it to one of the Group[K]Decode functions by reading the first byte, but hand it off to a second function if I fail; I determined that every instruction may indeed be identified by reading the (zero-indexed) third, fourth and fifth bits of the second byte. Around 40 instructions may only be decoded this way, at least by my decoder.
+
+Another major limitation of my decoder is that it's inordinately oriented toward generating strings for the output window in the debugger, and because it's in C, there's a huge amount of machinery involved in just putting the character bytes where they need to be for output. And I regrettably included some of that machinery in the decoding functions themselves, because that was the expedient choice for my grouping scheme, which often requires incidental interpretation of bit flags to determine, for example, what's the destination and what's the source. Nevertheless, it's surely possible to just have the decoding functions emit a struct that's passed to a string assembler and printer. I initially tried to write my own string API, but fell back on the standard library as the decoder became more complex and I had to prioritize where I was putting my energy. I move on from the project still unsatisfied with my handling of strings in C, in general.
+
+The best decision I made was writing a function that gave me maximum information about how my decoder interpreted an instruction, and, just as importantly, what it expected the next instruction to be. This greatly sped up debugging time when I'd incorrectly route an instruction, and blast through dozens of them with an incorrectly aligned instruction pointer, spewing garbage data to output before crashing. So for every instruction, I printed this to the output window:
+
+           Idx 75         
+
+  *** add [bp + di + 5000], ah ***  
+
+Inst byte 1:0000 0000
+
+
+
+Inst byte 2:1010 0011
+
+
+
+Inst byte 3:1000 1000
+
+
+
+Inst byte 4:0001 0011
+
+
+============================
+
+    Next inst: add
+
+Inst byte 1:0000 0000
+
+
+
+Inst byte 2:0000 0111
+
+
+
+Inst byte 3:1000 0001
+
+
+
+Inst byte 4:1100 0100
+
+
+
+Inst byte 5:1000 1000
+
+
+
+Inst byte 6:0000 0001
+
+...allowing me to step back through what happened and pretty quickly identify which instructions I was failing at. The "next inst" section makes a first pass at getting the opcode; the inst bytes go to 6 because some instructions are 6 bytes, but most aren't. It's just a naive look at the next several bytes that sit at the instruction pointer and beyond. 
+
+Ultimately I got as far as correctly decoding around 90% of the completionist decode assignment -- or, more accurately, around the first 90%, since incorrectly interpreting one is likely to improperly increment the instruction pointer and screw everything up going forward. And then I think made some changes to try to capture the last 10%, and actually regressed...! I decamped for Handmade Hero at that point, but since the hobby game I'm working on recently proved that it scaled bitmaps extremely slowly, I've come full circle!! I hope everyone enjoyed the assignment and learned as much from it as I did.
+
+

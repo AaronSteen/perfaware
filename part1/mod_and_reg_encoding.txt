@@ -1,0 +1,24 @@
+ByteOne
+	1000 1110
+               DW
+
+	Reg is Dest; byte instruction.
+
+ByteTwo
+	1101 0000
+
+MOD field
+	00 Memory mode, no displacement
+	01 Memory mode, 8 bit disp
+	10 Memory mode, 16 bit disp
+	11 Register mode, no disp
+
+REG field	W=0		W=1
+000		AL		AX
+001		CL		CX
+010		DL		DX
+011		BL		BX
+100		AH		SP
+101		CH		BP
+110		DH		SI
+111		BH		DI

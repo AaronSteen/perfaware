@@ -1,0 +1,82 @@
+mov ax, bx means u16 ax = bx // destination comes first
+
+inst decode (16-bit instruction)
+
+| 100010   0   0 | 11    000    000 |
+  inst     D   W   mod   reg     r/m
+
+    where:
+	inst: type of instruction e.g., mov
+	D:    if 0, register field is not the destination
+	W:    width of instruction
+	mod:  instruction subtype e.g., register to register (11)? register to mem? mem to register?
+	reg:  which register?
+	r/m:  which register or memory address?
+
+    e.g., mov ax, bx:
+	inst        d       w
+	100010      0       0 // first eight bits
+
+	mod         reg     r/m
+	11          000     0 // second eight bits
+
+	- inst(100010) represents mov instruction
+
+	- mov(11)      represents type of mov. 11 is register-to-register
+	
+	- d(0)         means the register field is not the destination. 
+		e.g.,
+		       mov ax, bx
+		         inst       d      w   mod     reg      r/m
+		       | 100010     0      0 | 11      000      000 |
+		                    ^                   ^
+				    D bit IS NOT set, so the specified reg is not the destination
+
+		         inst       d      w   mod     reg      r/m
+                       | 100010     1      0 | 11      000      000 |
+				    ^                   ^
+				    D bit IS set, so the specified reg is the destination
+	
+	- r/m(000)    declares a register or memory address operand, depending on the instruction.
+		      for mov ax, bx, bx appears in r/m because it's the source register
+			from where the data is being moved.
+		e.g., 
+		         inst       d      w   mod     reg      r/m
+                       | 100010     1      0 | 11      000      000 |
+				                                ^                   
+				                                where bx goes in mov ax, bx
+
+	- w(0)	      determines w = width of instruction. 0 means 8 bits, 1 means 16 bits			
+		e.g., 
+		         inst       d      w   mod     reg      r/m
+                       | 100010     1      1 | 11      000      000 |
+				           ^ bit is set because mov ax, bx is 16 bit instruction                   
+		
+| 100010   0   0 | 11    000    000 |
+  inst     D   W   mod   reg     r/m
+
+	   0000  89 d9    10001001     11011001	    
+			  | (mov) (reg_is_src) (word) | (reg-to-reg) (bx) (cx) |
+		 88 e5    10001000     11100101
+			  | (mov) (reg_is_src) (byte) | (reg-to-reg) (ah) (ch) |
+		 89 da    10001001     11011010 
+			  | (mov) (reg_is_src) (word) | (reg-to-reg) (bx) (dx) |
+		 89 de    10001001     11011110 
+			  | (mov) (reg_is_src) (word) | (reg-to-reg) (bx) (si) |
+		 89 fb    10001001     11111011
+			  | (mov) (reg_is_src) (word) | (reg-to-reg) (di) (bx) |
+		 88 c8    10001000     11001000 
+			  | (mov) (reg_is_src) (byte) | (reg-to-reg) (cl) (al) |
+		 88 ed    10001000     11101101 
+			  | (mov) (reg_is_src) (byte) | (reg-to-reg) (ch) (ch) |
+		 89 c3    10001001     11000011 
+			  | (mov) (reg_is_src) (word) | (reg-to-reg) (ax) (bx) |
+	   0010  89 f3    10001001     11110011 
+			  | (mov) (reg_is_src) (word) | (reg-to-reg) (si) (bx) |
+		 89 fc    10001001     11111100 
+			  | (mov) (reg_is_src) (word) | (reg-to-reg) (di) (sp) |
+		 89 c5    10001001     11000101
+			  | (mov) (reg_is_src) (word) | (reg-to-reg) (ax) (bp) |
+
+		    
+

@@ -1,0 +1,226 @@
+#!/bin/bash
+SCRIPT_DIR=$(dirname "$(realpath "$0")")
+SCRIPT_WIN=$(wslpath -w "$SCRIPT_DIR/build_wsl.bat")
+
+cmd.exe /c "$SCRIPT_WIN" 2>&1 | sed \
+        -e 's|\r||g' \
+        -e 's|C:\\Users\\ams56\\work\\|/mnt/c/Users/ams56/work/|g' \
+        -e 's|\\|/|g' \
+        -e 's|(\([0-9][0-9]*\),\([0-9][0-9]*\))|:\1:\2|g'
+
+        exit ${PIPESTATUS[0]}
+
+
+gist: type code and run tools inside WSL, but am building a windows program with windows tools.
+
+step 1: run ./build.sh inside WSL.
+
+    SCRIPT_DIR=$(dirname"$(realpath"$0")")
+        this means:
+            1. take the path from which i was launched
+            2. resolve it to a full, absolute path with no shortcuts or symlinks
+            3. chop off the filename so i'm left with just the folder.
+        therefore:
+            the script should work no matter what directory i'm in when i run it
+        Q: how do i get this to do anything in the terminal? when i run dirname"$(realpath"$0")", the output is just "." (no quotes in the actual output in the terminal, just using them in my message to you, claude, here, for clarity).
+
+    SCRIPT_WIN=$(wslpath -w "$SCRIPT_DIR/build_wsl.bat")
+        example: wslpath -w '/mnt/c/Users/Name'
+        output: C:\Users\Name
+
+step 2: WSL asks Windows to run the .bat file
+    
+    cmd.exe /c "$SCRIPT_WIN"
+        cmd.exe launches command prompt
+        /c means run one thing and exit
+
+@echo off
+set VCVARSALL=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat
+set CLANGCL=C:\ProgramDirIMade\clang+llvm-21.1.4-x86_64-pc-windows-msvc\clang+llvm-21.1.4-x86_64-pc-windows-msvc\bin\clang-cl.exe
+
+rem TODO: adjust these two paths to wherever the 8086 project actually lives.
+rem If it is under C:\Users\ams56\work\ then build.sh's sed path-rewriting
+rem works unchanged.
+set CODE=C:\Users\ams56\work\8086\code
+set BUILD=C:\Users\ams56\work\8086\build
+
+set CommonCompilerFlags=-MTd -nologo -Od -Oi -W4 -Wno-unused-function -Wno-writable-strings -Wno-unused-variable -Wno-sign-compare -Wno-missing-field-initializers -Wno-missing-braces -Wno-unused-but-set-variable -D_CRT_SECURE_NO_WARNINGS -FC -Z7
+set CommonLinkerFlags=-opt:ref -incremental:no /DEBUG:FULL
+
+call "%VCVARSALL%" x64 > NUL 2>&1
+if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
+
+if not exist %BUILD% mkdir %BUILD%
+pushd %BUILD%
+"%CLANGCL%" %CommonCompilerFlags% %CODE%\main.c /link %CommonLinkerFlags% /OUT:app.exe
+if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
+echo app.exe: OK
+popd
+
+step 3: the .bat file sets the table
+        
+        set VCVARSALL
+            stores path to the script that configures the environment variables in command prompt to be able to run CL compiler
+        set CLANGCL
+            stores path to clang-cl compiler
+
+        set CODE, BUILD
+            store path to the code directory for the project, and the build directory for the project.
+
+        set CommonCompilerFlags, CommonLinkerFlags
+            (the compiler and linker flags)
+
+        call "%VCVARSALL%" x64 > NUL 2>&1
+        if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
+            1.) run vcvarsall
+
+            2.) > NUL 2>&1
+                2 is stderr.
+                >& let's just interpret >& as a redirecton operator and know that what comes next is a file 
+                descriptor.
+
+            3.) if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
+                /b means "only exit the current batch script or subroutine rather than the entire
+                    command prompt window"
+                %ERRORLEVEL% stores the error code of the last command
+
+            so in summary: 
+                - try to run vcvarsall
+                - pipe command's standard output to null
+                - pipe command's error output to stdout
+                - read the error level
+                - if it was anything other than zero, quit this script
+                - pass the error code to the environment from which this script was called.
+
+        if not exist %BUILD% mkdir %BUILD%
+            make the directory at the path BUILD if it's not already there.
+
+        pushd %BUILD%
+            enter the build directory
+
+        "%CLANGCL%" %CommonCompilerFlags% %CODE%\main.c /link %CommonLinkerFlags% /OUT:app.exe
+        if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
+        echo app.exe: OK
+        popd
+            run clang cl with the compiler and linker flags, name the executable app.exe
+            check the error level and exit if it's not 0, as before
+            print that it compiled correctly
+            return to previous directory.
+
+        
+cmd.exe /c "$SCRIPT_WIN" 2>&1 | sed \
+    -e 's|\r||g' \
+    -e 's|C:\\Users\\ams56\\work\\|/mnt/c/Users/ams56/work/|g' \
+    -e 's|\\|/|g' \
+    -e 's|(\([0-9][0-9]*\),\([0-9][0-9]*\))|:\1:\2|g'
+
+    exit ${PIPESTATUS[0]}
+
+    now we are back in WSL. what has happened so far: cmd.exe /c "$SCRIPT_WIN" 2>&1. that's all.
+
+    cmd.exe /c "$SCRIPT_WIN" 2>&1 | <---- this pipe is what we're interpreting next. the output of the 
+        batch script we analyzed above is piped into sed. we're expecting error messages
+        from the compiler that will reference specific file paths for code files in the project.
+        the file paths will be in windows format since we switched to command prompt to compile.
+
+        -e 's|\r||g' \
+            - "-e" specifies a script or command that will be executed. since we are
+                running multiple commands, we need it
+            - s means substitute
+            - | is delimiter
+            - \r is the character for which we want to substitute something. /r is the carriage
+                return character that windows uses but linux doesn't.
+            - || is the character we want to substitute for /r (we want to substitute 
+                nothing; we want to delete /r)
+            - g means do it for every occurrence on a line, not just the first occurrence
+            - \ means continue the command on the next line
+
+        -e 's|C:\\Users\\ams56\\work\\|/mnt/c/Users/ams56/work/|g'
+            - "-e" means here's another command
+            - s is substitute
+            - | is delimiter
+            - C:\\Users\\ams56\\work\\ is the windows path, replace it
+                with /mnt/c/Users/ams56/work/ so neovim quickfix list can know where the files with 
+                errors are. neovim wouldn't be able to interpret the windows file paths since we're
+                running inside wsl. /mnt/c/Users... is how programs running in WSL understand
+                files in the windows filesystem.
+
+        - e 's|\\|/|g'
+            replace all instances of \\ with / that bash wants
+
+        -e 's|(\([0-9][0-9]*\),\([0-9][0-9]*\))|:\1:\2|g'       
+            we want to match error lines emitted by clang that are like this:
+
+                C:\Users\ams56\work\beaver\code\beaver.cpp(142,17): error: use of undeclared identifier
+
+            and convert the line and character part portion (142,17) to :142:17 so that neovim can
+                understand it. therefore some regex to match (142,17) and replace the ( and )
+                characters with : characters.
+        
+            ( <-- literal parenthesis
+                \( <-- start a regex capture group (first capture group, can later reference it with "/1"
+                    [0-9][0-9]* <-- match one digit, followed by zero or any number of digits.
+                        e.g., it would match:
+                            1, because match one digit and 0 digits follow this 1 
+                            14, because match one digit (the 1), and the 4 because it comes after the 1 
+                            142, because match the 1 and any number of subsequent digits.
+                            etc. it would also match 1465498464059.
+
+                \) <-- end the capture group
+                ,  <-- match a literal comma
+                \( <-- start a new capture group
+                    [0-9][0-9]* <-- as above. match one digit followed by zero or any number of digits.
+                \) <-- end the capture group
+            ) <-- literal parenthesis.
+
+            thus we have matched (142,17), (3694,8), (1, 23) etc.
+
+            after the | delimiter, we have another expression specifiying the string we want to replace the characters
+                we just matched. basically we delete what was matched and put in its place what comes after the delimiter.
+
+                :\1:\2
+
+                    : <-- put a : character
+                    \1 <-- this means put capture group 1, so the first set of one or more digits we matched. e.g., 142
+                    : <-- put another : character
+                    \2 <-- this means put capture group 2. second set of numbers. e.g., 17
+
+exit ${PIPESTATUS[0]}
+
+    exit the bash script, but instead of exiting with whatever error code sed produced (almost always a 0 for success),
+    index into a list of error codes stored in the PIPESTATUS.
+    
+    braces are mandatory because they tell bash to interpret the command PIPESTATUS[0] as a single command.
+    without the braces, bash would read PIPESTATUS and interpret it, without referencing the [0] to index
+    the first item in the PIPESTATUS array.
+            
+            that's all!!!!!
+
+
+
+
+            
+
+
+
+
+
+
+
+
+
+
+            
+
+
+
+
+
+
+    
+    
+
+
+    
+    
+

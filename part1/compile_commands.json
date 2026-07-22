@@ -1,0 +1,17 @@
+[
+  {
+    "directory": "/mnt/c/Users/ams56/work/pap/build",
+    "command": "clang -target x86_64-w64-mingw32 -isystem /usr/x86_64-w64-mingw32/include -std=c17 -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-missing-field-initializers -D_CRT_SECURE_NO_WARNINGS /mnt/c/Users/ams56/work/pap/code/main.c",
+    "file": "/mnt/c/Users/ams56/work/pap/code/main.c"
+},
+  {
+    "directory": "/mnt/c/Users/ams56/work/pap/build",
+    "command": "clang -target x86_64-w64-mingw32 -isystem /usr/x86_64-w64-mingw32/include -std=c17 -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-missing-field-initializers -D_CRT_SECURE_NO_WARNINGS -include /mnt/c/Users/ams56/work/pap/code/common.h -include /mnt/c/Users/ams56/work/pap/code/tables.c /mnt/c/Users/ams56/work/pap/code/source.c",
+    "file": "/mnt/c/Users/ams56/work/pap/code/source.c"
+},
+  {
+    "directory": "/mnt/c/Users/ams56/work/pap/build",
+    "command": "clang -target x86_64-w64-mingw32 -isystem /usr/x86_64-w64-mingw32/include -std=c17 -Wno-unused-function -Wno-unused-variable -Wno-sign-compare -Wno-missing-field-initializers -D_CRT_SECURE_NO_WARNINGS -include /mnt/c/Users/ams56/work/pap/code/common.h /mnt/c/Users/ams56/work/pap/code/tables.c",
+    "file": "/mnt/c/Users/ams56/work/pap/code/tables.c"
+}
+]
