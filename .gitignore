@@ -20,3 +20,6 @@ build/
 *.cache/
 *.zip
 part2/casey_random/*
+*.json
+*.f64
+*gen_compile_commands.sh

@@ -2,6 +2,7 @@
 // Pick 5 random cluster centers
 // For each, generate count / 5 pairs
 // Write the pairs to JSON
+
 #define _CRT_SECURE_NO_WARNINGS
 
 #include <stdio.h>
@@ -45,7 +46,7 @@ __Debug_OutputErrorMessage(char *ErrorMessage, const char *CallingFunction, int 
     OutputDebugStringA(".\n\n");
 }
 
-FILE *
+static FILE *
 Open(u64 PairCount, char *Filename)
 {
     char FilenameBuffer[256];
