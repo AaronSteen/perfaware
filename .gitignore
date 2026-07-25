@@ -19,3 +19,4 @@ build/
 *.data
 *.cache/
 *.zip
+part2/casey_random/*
