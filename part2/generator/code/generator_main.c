@@ -2,49 +2,13 @@
 // Pick 5 random cluster centers
 // For each, generate count / 5 pairs
 // Write the pairs to JSON
-
-#define _CRT_SECURE_NO_WARNINGS
-
-#include <stdio.h>
-#include <stdint.h>
-#include <math.h>
-#include <stdlib.h>
-#include <windows.h>
-
-typedef double f64;
-typedef uint32_t u32;
-typedef uint64_t u64;
-
-#define EARTH_RADIUS 6372.8f
-
-#define Assert(Condition) if(!(Condition)) {*(volatile int *)0 = 1;}
-
-struct pair
-{
-    f64 X0;
-    f64 Y0;
-    f64 X1;
-    f64 Y1;
-};
+#include "common.h"
+#include "functions.c"
 
 struct random_series
 {
     u64 A, B, C, D;
 };
-
-#define Debug_OutputErrorMessage(Msg) __Debug_OutputErrorMessage(Msg, __func__, __LINE__)
-
-void
-__Debug_OutputErrorMessage(char *ErrorMessage, const char *CallingFunction, int Line)
-{
-    char ErrorBuffer[256];
-    sprintf_s(ErrorBuffer, sizeof(ErrorBuffer), 
-              "\nERROR:\n  In function %s, on line %d,\n\n    ", CallingFunction, Line);
-    OutputDebugStringA(ErrorBuffer);
-    sprintf_s(ErrorBuffer, sizeof(ErrorBuffer), ErrorMessage);
-    OutputDebugStringA(ErrorBuffer);
-    OutputDebugStringA(".\n\n");
-}
 
 static FILE *
 Open(u64 PairCount, char *Filename)
@@ -54,14 +18,14 @@ Open(u64 PairCount, char *Filename)
     FILE *Result = fopen(FilenameBuffer, "wb");
     if(!Result)
     {
-        Debug_OutputErrorMessage("Failed to open file");
+        OutputErrorMessage("Failed to open file");
         exit(1);
     }
 
     return(Result);
 }
 
-u64 
+static u64 
 RotateLeft(u64 V, int Shift)
 {
 
@@ -85,7 +49,7 @@ RotateLeft(u64 V, int Shift)
     return(Result);
 }
 
-u64
+static u64
 RandomU64(struct random_series *Series)
 {
     u64 A = Series->A;
@@ -108,7 +72,7 @@ RandomU64(struct random_series *Series)
     return(D);
 }
 
-struct random_series
+static struct random_series
 SeedRandomSeries(u64 Value)
 {
     struct random_series Series = {};
@@ -127,7 +91,7 @@ SeedRandomSeries(u64 Value)
     return(Series);
 }
 
-f64
+static f64
 RandomInRange(struct random_series *Series, f64 Min, f64 Max)
 {
     // A + t(B - A)
@@ -140,7 +104,7 @@ RandomInRange(struct random_series *Series, f64 Min, f64 Max)
     return(Result);
 }
 
-f64
+static f64
 RandomDegree(struct random_series *Series, f64 Center, f64 Radius, f64 MaxAllowed)
 {
     f64 Min = Center - Radius;
@@ -156,41 +120,6 @@ RandomDegree(struct random_series *Series, f64 Center, f64 Radius, f64 MaxAllowe
     }
 
     f64 Result = RandomInRange(Series, Min, Max);
-    return(Result);
-}
-
-f64
-Square(f64 A)
-{
-    f64 Result = (A*A);
-    return(Result);
-}
-
-f64
-RadiansFromDegrees(f64 Degrees)
-{
-    f64 Result = 0.01745329251994329577 * Degrees;
-    return(Result);
-}
-
-f64
-Haversine(struct pair Pair)
-{
-    f64 Lat1 = Pair.Y0;
-    f64 Lat2 = Pair.Y1;
-    f64 Lon1 = Pair.X0;
-    f64 Lon2 = Pair.X1;
-
-    f64 dLat = RadiansFromDegrees(Lat2 - Lat1);
-    f64 dLon = RadiansFromDegrees(Lon2 - Lon1);
-    Lat1 = RadiansFromDegrees(Lat1);
-    Lat2 = RadiansFromDegrees(Lat2);
-
-    f64 A = Square(sin(dLat/2.0f)) + cos(Lat1) * cos(Lat2) * Square(sin(dLon/2.0f));
-    f64 C = 2.0f * asin(sqrt(A));
-
-    f64 Result = EARTH_RADIUS * C;
-
     return(Result);
 }
 
@@ -240,10 +169,6 @@ Haversine(struct pair Pair)
 //              f64 Result = RandomInRange(Series, MinVal, MaxVal)
 //              Which lerps between Min and Max with a random value between 0 and 1.
 //
-
-
-
-
 
 int
 main(int ArgCount, char **ArgumentVector)
@@ -303,7 +228,7 @@ main(int ArgCount, char **ArgumentVector)
     FILE *ComputedHaversines = Open(NumPairs, "ComputedHaversines.f64");
     if(!(JsonOutput && ComputedHaversines))
     {
-        Debug_OutputErrorMessage("One or both of JsonOutput and ComputedHaversines couldn't be opened");
+        OutputErrorMessage("One or both of JsonOutput and ComputedHaversines couldn't be opened");
         exit(1);
     }
 

@@ -1,0 +1,9 @@
+-target
+x86_64-w64-mingw32
+-isystem
+/usr/x86_64-w64-mingw32/include
+-std=c11
+-I
+shared
+-include
+common.h

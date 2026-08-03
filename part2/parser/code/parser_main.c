@@ -1,109 +1,6 @@
-#define _CRT_SECURE_NO_WARNINGS
-
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <windows.h>
-
-typedef double f64;
-typedef uint8_t u8;
-typedef uint32_t u32;
-typedef uint64_t u64;
-
-#define KILOBYTES(N) (size_t)(N * 1024)
-#define MEGABYTES(N) (size_t)(KILOBYTES(N) * 1024)
-#define GIGABYTES(N) (size_t)(MEGABYTES(N) * 1024)
-
-struct json
-{
-    FILE *FilePointer;
-    char *Filename;
-    size_t Size;
-    u8 *Start;
-    u8 *Cursor;
-};
-
-#define OutputErrorMessage(...) \
-    OutputErrorMessage_(__func__, __LINE__, __VA_ARGS__)
-
-void
-OutputErrorMessage_(const char *CallingFunction, int Line, const char *Format, ...)
-{
-    char Buffer[512];
-    int Size = sizeof(Buffer);
-    
-    int Offset = snprintf(Buffer, Size,
-                          "\nERROR:\n    In function %s, on line %d,\n\n    ",
-                          CallingFunction, Line);
-    if(Offset < 0)
-    {
-        // snprint returns negative if it failed to print anything
-        Offset = 0;
-    }
-    else if(Offset > Size-1)
-    {
-        Offset = Size-1;
-    }
-
-    va_list Args;
-    va_start(Args, Format);
-    int Written = vsnprintf(Buffer + Offset, Size - Offset, Format, Args);
-    va_end(Args);
-
-    if(Written > 0)
-    {
-        Offset += Written;
-    }
-    if(Offset > Size-1)
-    {
-        Offset = Size-1;
-    }
-
-    snprintf(Buffer+Offset, Size-Offset, ".\n\n");
-
-    OutputDebugStringA(Buffer);
-}
-
-char *
-GetFileExtension(char *Filename)
-{
-    char *Extension = Filename;
-    while(*Extension != '\0')
-    {
-        ++Extension;
-    }
-    while(*Extension != '.')
-    {
-        --Extension;
-    }
-    return(Extension);
-}
-
-static void
-OpenJson(struct json *Json)
-{
-    Json->FilePointer = fopen(Json->Filename, "rb");
-    if(!Json->FilePointer)
-    {
-        OutputErrorMessage("Failed to open file %s", Json->Filename);
-        exit(1);
-    }
-
-    int SeekResult = _fseeki64(Json->FilePointer, 0, SEEK_END);
-    if(SeekResult != 0)
-    {
-        OutputErrorMessage("Failed to seek to end of file %s", Json->Filename);
-        exit(1);
-    }
-
-    Json->Size = _ftelli64(Json->FilePointer);
-    if(SeekResult == -1L) 
-    {
-        // -1LU is result on fail
-        OutputErrorMessage("Couldn't get size for file %s", Json->Filename);
-        exit(1);
-    }
-}
+#include "common.h"
+#include "functions.c"
+#include "json_parser.c"
 
 int
 main(int ArgCount, char **ArgVector)
@@ -114,7 +11,7 @@ main(int ArgCount, char **ArgVector)
         exit(1);
     }
 
-    struct json Json;
+    struct json Json = {0};
     Json.Filename = ArgVector[1];
     char *Extension = GetFileExtension(Json.Filename);
     if(strcmp(Extension, ".json") != 0)
@@ -124,17 +21,97 @@ main(int ArgCount, char **ArgVector)
     }
 
     OpenJson(&Json);
-    u64 TwoGigs = GIGABYTES(2);
-    if(Json.Size > TwoGigs)
+    if(Json.JsonToParse.NumBytes > GIGABYTES(2))
     {
-        OutputErrorMessage("This utility only parses .json files of size %llu or smaller. You supplied a file of size %llu", GIGABYTES(2), Json.Size);
+        OutputErrorMessage("This utility only parses .json files of size %llu or smaller. You supplied a file of size %llu", GIGABYTES(2), Json.JsonToParse.NumBytes);
         exit(1);
     }
 
+    Json.JsonToParse.Data = (u8 *)malloc(Json.JsonToParse.NumBytes);
+    if(Json.JsonToParse.Data == NULL)
+    {
+        OutputErrorMessage("malloc failed");
+        exit(1);
+    }
+    size_t BytesRead = fread(Json.JsonToParse.Data, sizeof(u8), Json.JsonToParse.NumBytes, Json.FilePointer);
+    if(BytesRead != Json.JsonToParse.NumBytes)
+    {
+        OutputErrorMessage("Error when reading json into buffer");
+        exit(1);
+    }
+
+    struct json_parser Parser;
+    Parser.JsonToParse = Json.JsonToParse;
+    Parser.HadError = false;
+    Parser.Cursor = 0;
+
+    struct buffer NeedEmptyBufferToGetThisGoing = {};
+    struct json_element *ParsedJson = ParseJsonElement(&Parser, NeedEmptyBufferToGetThisGoing, GetJsonToken(&Parser));
+
+    // this 1000 is temp value, need to compute based on input
+    u64 MaxPairCount = 1000;
+    struct buffer HaversinePairsStart = AllocateBuffer(sizeof(struct haversine_pair) * MaxPairCount);
+    u64 PairCount = 0;
+    struct json_element *ParsedPairsArrayStart = LookUpJsonElement(ParsedJson, CONSTANT_STRING("pairs"));
+    if(ParsedPairsArrayStart)
+    {
+        for(struct json_element *Element = ParsedPairsArrayStart->FirstSubElement;
+            Element && (PairCount < MaxPairCount);
+            Element = Element->NextSibling)
+        {
+            struct haversine_pair *Pair = (struct haversine_pair *)HaversinePairsStart.Data + PairCount++;
+
+            struct json_element *X0 = LookUpJsonElement(Element, CONSTANT_STRING("x0"));
+            struct json_element *Y0 = LookUpJsonElement(Element, CONSTANT_STRING("y0"));
+            struct json_element *X1 = LookUpJsonElement(Element, CONSTANT_STRING("x1"));
+            struct json_element *Y1 = LookUpJsonElement(Element, CONSTANT_STRING("y1"));
+        }
+    }
+
+
+   
+
+#if 0
+    ValidateJsonAndSetCursor exits if invalid. Otherwise, it sets cursor to the first pair.
+    ValidateJsonAndSetCursor(&Json);
+
+
+    f64 Accumulator = 0;
+    u64 PairCount = 0;
+
+    // STOP: this seems to be reading the doubles properly. Next:
+    //      - test with the small 10 pair dataset to confirm it is working properly
+    //      - fix the project structure so that generator and parser can use the same functions
+    //      - pull the code for reading the X and Y values into a function
+    //          - it should return a bool to indicate if there are more pairs remaining
+    //      - for getting the average let's keep a running tally of the number of pairs we encounter
+    //          and divide by that number at the end. let's assume we don't know how many pairs there
+    //          are in the file.
+    //      - for fun test computing the sum as we go vs. storing them in an array and doing it all at once
+    //              at the end to see which is faster.
+
+
+
+    while(1)
+    {
+        // Parse returns true if there are more pairs to parse
+        if(!Parse(&Json, &PairCount, &Accumulator))
+        {
+            break;
+        }
+    }
+
+    f64 Result = Accumulator / (f64)PairCount;
+    char PrintBuffer[256];
+    sprintf(PrintBuffer, "Average: %lf", Result);
+    OutputDebugStringA(PrintBuffer);
+#endif
+
+    if(Json.FilePointer) fclose(Json.FilePointer);
+    if(Json.JsonToParse.Data) free((void *)Json.JsonToParse.Data);
+
     // A json input file containing 10 million pairs is 1,085,542,039 bytes, or a little more than 1 GB.
     // Therefore let's say that we support input json file sizes of no more than 2GB.
-
-
 
     return(0);
 }
