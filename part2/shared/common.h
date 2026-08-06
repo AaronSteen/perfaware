@@ -16,6 +16,7 @@ typedef uint64_t u64;
 typedef int64_t s64;
 typedef int32_t b32;
 
+
 #define KILOBYTES(N) (size_t)(N * 1024)
 #define MEGABYTES(N) (size_t)(KILOBYTES(N) * 1024)
 #define GIGABYTES(N) (size_t)(MEGABYTES(N) * 1024)
@@ -48,3 +49,4 @@ struct haversine_pair
     f64 Y1;
 };
 
+#include "functions.c"

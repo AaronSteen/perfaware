@@ -334,9 +334,6 @@ ParseJsonContainer(struct json_parser *Parser, struct json_token StartingToken, 
             }
             else if(NextToken.Type != EndingTokenShouldBe)
             {
-                // stop: erroring here, i think when entering the main array of k-v containers.
-                //      we end up here if we get the next token for a k-v container and do not
-                //      get either a string literal or the ending token
                 Parser->HadError = true;
                 OutputErrorMessage("Did not get expected close brace when parsing K-V container");
                 exit(1);
@@ -435,3 +432,155 @@ LookUpJsonElement(struct json_element *Object, struct buffer Key)
     return(Result);
 }
 
+struct json_element *
+ParseJson(struct json *Json)
+{
+    struct json_parser Parser;
+    Parser.JsonToParse = Json->JsonToParse;
+    Parser.HadError = false;
+    Parser.Cursor = 0;
+
+    struct buffer NeedEmptyBufferToGetThisGoing = {};
+    struct json_element *Result = ParseJsonElement(&Parser, NeedEmptyBufferToGetThisGoing, GetJsonToken(&Parser));
+    return(Result);
+}
+
+f64
+ConvertJsonSign(struct buffer Source, u64 *CursorInJsonString)
+{
+    u64 LocalCursor = *CursorInJsonString;
+
+    f64 Result = 1.0;
+    if(IsInBounds(Source, LocalCursor) && (Source.Data[LocalCursor] == '-'))
+    {
+        Result = -1.0;
+        if(IsInBounds(Source, LocalCursor+1))
+        {
+            ++LocalCursor;
+        }
+    }
+
+    *CursorInJsonString = LocalCursor;
+
+    return(Result);
+}
+
+f64
+ConvertJsonNumber(struct buffer Source, u64 *CursorInJsonString)
+{
+    u64 LocalCursor = *CursorInJsonString;
+
+    f64 Result = 0;
+    while(IsInBounds(Source, LocalCursor))
+    {
+        u8 ConvertToBinary = Source.Data[LocalCursor] - (u8)'0';
+        if(ConvertToBinary < 10)
+        {
+            Result = 10.0f*Result + (f64)ConvertToBinary;
+            ++LocalCursor;
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    *CursorInJsonString = LocalCursor;
+
+    return(Result);
+}
+
+f64
+ConvertJsonStringToF64(struct json_element *JsonObject, struct buffer Key)
+{
+    f64 Result = 0;
+
+    struct json_element *Element = LookUpJsonElement(JsonObject, Key);
+    if(Element)
+    {
+        struct buffer Source = Element->Value;
+        u64 LocalCursor = 0;
+
+        f64 Sign = ConvertJsonSign(Source, &LocalCursor);
+
+        // Just get the whole number part of the float first
+        f64 Number = ConvertJsonNumber(Source, &LocalCursor);
+
+        // Now get the fractional part
+        if(IsInBounds(Source, LocalCursor) && (Source.Data[LocalCursor] == '.'))
+        {
+            ++LocalCursor;
+            f64 Coefficient = 1.0f / 10.0f;
+            while(IsInBounds(Source, LocalCursor))
+            {
+                u8 ConvertToBinary = Source.Data[LocalCursor] - (u8)'0';
+                if(ConvertToBinary < 10)
+                {
+                    Number = Number + Coefficient* (f64)ConvertToBinary;
+                    Coefficient *= 1.0f / 10.0f;
+                    ++LocalCursor;
+                }
+                else
+                {
+                    break;
+                }
+            }
+        }
+
+        // Handle scientific notation if it exists
+        // First skip e or E and a leading + if it exists
+        if(IsInBounds(Source, LocalCursor) && 
+           ((Source.Data[LocalCursor] == 'e') || (Source.Data[LocalCursor] == 'E')))
+        {
+            ++LocalCursor;
+            if(IsInBounds(Source, LocalCursor) && (Source.Data[LocalCursor] == '+'))
+            {
+                ++LocalCursor;
+            }
+
+            // In the case that there was a minus sign for the expontent, the above check for '+'
+            //      would have been skipped, and we'd be pointing at it now; ConvertJsonSign
+            //      would properly return -1.0f.
+            //
+            //  In the case that there was no sign, we'd be pointing at a number here. But that's 
+            //      OK, because in the case that the value at LocalCursor is not a '-', ConvertJsonNumber
+            //      just returns 1.0f, and does not advance the cursor. 
+            //      So the call itself and the multiply below with ExponentSign as an operand have no effect.
+            f64 ExponentSign = ConvertJsonSign(Source, &LocalCursor);
+            f64 Exponent = ExponentSign*ConvertJsonNumber(Source, &LocalCursor);
+            Number *= pow(10.0f, Exponent);
+        }
+
+        Result = Sign * Number;
+    }
+
+    return(Result);
+}
+
+
+// struct json_element
+// {
+//     struct buffer KeyIfItExists;
+//     struct buffer Value;
+//     struct json_element *FirstSubElement;
+//     struct json_element *NextSibling;
+// };
+// 
+
+void
+FreeJson(struct json_element *Node)
+{
+    while(Node)
+    {
+        struct json_element *FreeNode = Node;
+        Node = FreeNode->NextSibling;
+
+        FreeJson(FreeNode->FirstSubElement);
+        free(FreeNode);
+    }
+}
+
+
+
+// Define FreeNext as Element->NextSibling
+// Replace
