@@ -191,7 +191,7 @@ GetJsonToken(struct json_parser *Parser)
                           }
 
                           // Skip digits before the decimal point
-                          if(JsonToParse.Data[LocalCursor] != '0')
+                          if(IsJsonDigit(JsonToParse, LocalCursor))
                           {
                               while(IsJsonDigit(JsonToParse, LocalCursor) && IsInBounds(JsonToParse, LocalCursor+1))
                               {

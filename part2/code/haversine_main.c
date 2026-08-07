@@ -1,6 +1,67 @@
+#define _CRT_SECURE_NO_WARNINGS
+
+#include <sys/stat.h>
 #include "common.h"
 #include "json_parser.c"
 
+void
+DebugOutput(const char *Format, ...)
+{
+    char PrintBuffer[512];
+    int PrintBufferSize = sizeof(PrintBuffer);
+
+    va_list Args;
+    va_start(Args, Format);
+    int BytesWritten = vsnprintf(PrintBuffer, PrintBufferSize, Format, Args);
+    va_end(Args);
+
+    if(BytesWritten > PrintBufferSize)
+    {
+        OutputDebugStringA("\n\nERROR: DebugOutput function format string did not fit in print buffer\n\n");
+    }
+    OutputDebugStringA(PrintBuffer);
+    OutputDebugStringA("\n");
+
+    return;
+}
+
+struct buffer 
+ReadEntireFile(char *FileName)
+{
+    // note we copied this from casey; he uses FileName here but
+    //      we use Filename (no capped "n") in our main function below
+    struct buffer Result = {};
+
+    FILE *File = fopen(FileName, "rb");
+    if(File)
+    {
+#if _WIN32
+        struct __stat64 Stat;
+        _stat64(FileName, &Stat);
+#else
+        struct stat Stat;
+        stat(FileName, &Stat);
+#endif
+
+        Result = AllocateBuffer(Stat.st_size);
+        if(Result.Data)
+        {
+            if(fread(Result.Data, Result.NumBytes, 1, File) != 1)
+            {
+                OutputErrorMessage("ERROR: Unable to read \"%s\".\n", FileName);
+                exit(1);
+            }
+        }
+        fclose(File);
+    }
+    else
+    {
+        OutputErrorMessage("ERROR: Unable to open \"%s\".\n", FileName);
+        exit(1);
+    }
+
+    return Result;
+}
 
 void
 InitInputJson(struct json *Json)
@@ -23,6 +84,7 @@ InitInputJson(struct json *Json)
         OutputErrorMessage("Error when reading json into buffer");
         exit(1);
     }
+    fclose(Json->FilePointer);
 }
 
 u64
@@ -82,9 +144,10 @@ SumHaversineDistances(u64 PairCount, struct buffer *HaversinePairsBuffer)
 int
 main(int ArgCount, char **ArgVector)
 {
-    if(ArgCount != 2)
+    // Check usage
+    if(!((ArgCount == 2) || (ArgCount == 3)))
     {
-        OutputErrorMessage("Two arguments required, but %d was/were supplied", ArgCount);
+        OutputErrorMessage("Either two or three arguments required, but %d was/were supplied", ArgCount);
         exit(1);
     }
 
@@ -96,11 +159,13 @@ main(int ArgCount, char **ArgVector)
         exit(1);
     }
 
+    // Init json
     struct json Json;
     Json.Filename = Filename;
     OpenJson(&Json);
     InitInputJson(&Json);
 
+    // Validate json
     u32 MinBytesForJsonPair = 6 * 4;
     u64 MaxPairCount = Json.JsonToParse.NumBytes / MinBytesForJsonPair;
     if(MaxPairCount == 0)
@@ -109,20 +174,57 @@ main(int ArgCount, char **ArgVector)
         exit(1);
     }
 
+    // Alloc pairs memory
     struct buffer HaversinePairs = AllocateBuffer(sizeof(struct haversine_pair) * MaxPairCount);
-    u64 PairCount = ParseHaversinePairs(&HaversinePairs, &Json, MaxPairCount);
-    f64 Sum = SumHaversineDistances(PairCount, &HaversinePairs);
-    f64 Average = Sum / (f64)PairCount;
 
-    char PrintBuffer[256];
-    sprintf(PrintBuffer, "Expected average: %f\n", Average);
-    OutputDebugStringA(PrintBuffer);
+    // Parse
+    u64 JsonPairCount = ParseHaversinePairs(&HaversinePairs, &Json, MaxPairCount);
 
-    if(Json.FilePointer) fclose(Json.FilePointer);
+    // Compute
+    f64 JsonSum = SumHaversineDistances(JsonPairCount, &HaversinePairs);
+    f64 JsonAverage = JsonSum / (f64)JsonPairCount;
+
+    DebugOutput("\n\n");
+    DebugOutput("Input size: %llu", Json.JsonToParse.NumBytes);
+    DebugOutput("Pair count: %llu", JsonPairCount);
+    DebugOutput("Haversine sum: %.16f", JsonSum);
+
+    // Validate computation
+
+    DebugOutput("Avg. Haversine for json pairs: %.16f\n", JsonAverage);
+    if(ArgCount == 3)
+    {
+        char *AnswersFilename = ArgVector[2];
+        char *AnswersExtension = GetFileExtension(AnswersFilename);
+        if(strcmp(AnswersExtension, ".f64") != 0)
+        {
+            OutputErrorMessage("Need .f64 file for second argument. You provided file with extension %s", AnswersExtension);
+            exit(1);
+        }
+
+        struct buffer Answers = ReadEntireFile(AnswersFilename);
+
+        // The final 8 bytes in the file comprise the computed average of the preceding f64s in the file. So don't
+        //      take these last 8 bytes in the file into account when computing the number of answers in the file.
+        u64 NumAnswers = (Answers.NumBytes - sizeof(f64)) / sizeof(f64);
+        if(NumAnswers != JsonPairCount)
+        {
+            OutputErrorMessage("Error: Number of pairs found in json, %ld, did not match number of answers, %ld, in answers file", JsonPairCount, NumAnswers);
+            exit(1);
+        }
+
+        f64 *AnswerData = (f64 *)Answers.Data;
+        f64 AnswersAverage = AnswerData[NumAnswers]; // NumAnswers is the total number of f64s in the file less 1,
+                                                     //         so using it to index into a 0-indexed file will point to the last f64 in the file
+        DebugOutput("\nValidation");
+        DebugOutput("==============");
+        DebugOutput("Reference average: %.16f", AnswersAverage);
+        DebugOutput("Difference: %.16f", JsonAverage - AnswersAverage);
+        DebugOutput("\n\n");
+    }
+
+    if(HaversinePairs.Data) free((void *)HaversinePairs.Data);
     if(Json.JsonToParse.Data) free((void *)Json.JsonToParse.Data);
-
-    // A json input file containing 10 million pairs is 1,085,542,039 bytes, or a little more than 1 GB.
-    // Therefore let's say that we support input json file sizes of no more than 2GB.
 
     return(0);
 }

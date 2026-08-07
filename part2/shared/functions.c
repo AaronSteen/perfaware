@@ -43,16 +43,24 @@ OutputErrorMessage_(const char *CallingFunction, int Line, const char *Format, .
     char Buffer[512];
     int Size = sizeof(Buffer);
 
+    // snprintf returns the number of bytes it successfully printed
     int Offset = snprintf(Buffer, Size,
                           "\nERROR:\n    In function %s, on line %d,\n\n    ",
                           CallingFunction, Line);
+
+    // We use the number of bytes snprintf successfully printed to determine
+    //      how many bytes are left in Buffer
     if(Offset < 0)
     {
-        // snprint returns negative if it failed to print anything
-        Offset = 0;
+        // snprint returns negative if it failed to print anything.
+        //      this function needs to always work, so let's exit here if this happens and fix it.
+        OutputDebugStringA("\n\nFailed to write function and line info inside OutputErrorMessage_\n\n");
+        exit(1);
     }
     else if(Offset > Size-1)
     {
+        // If snprintf somehow filled the buffer, set the next available byte in the buffer to the last
+        //      byte. This will cause vsnprintf below to fail to print anything and thereby not overflow the buffer.
         Offset = Size-1;
     }
 
