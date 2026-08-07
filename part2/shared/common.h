@@ -21,7 +21,7 @@ typedef int32_t b32;
 #define MEGABYTES(N) (size_t)(KILOBYTES(N) * 1024)
 #define GIGABYTES(N) (size_t)(MEGABYTES(N) * 1024)
 
-#define EARTH_RADIUS 6372.8f
+#define EARTH_RADIUS 6372.8
 
 #define Assert(Condition) if(!(Condition)) {*(volatile int *)0 = 1;}
 

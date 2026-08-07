@@ -81,9 +81,6 @@ GetJsonToken(struct json_parser *Parser)
     struct buffer JsonToParse = Parser->JsonToParse;
     u64 LocalCursor = Parser->Cursor;
 
-    Result.Buffer.NumBytes = 1;
-    Result.Buffer.Data = Parser->JsonToParse.Data + LocalCursor;
-
     while(IsJsonWhitespace(JsonToParse, LocalCursor))
     {
         ++LocalCursor;
@@ -91,6 +88,8 @@ GetJsonToken(struct json_parser *Parser)
 
     if(IsInBounds(JsonToParse, LocalCursor))
     {
+        Result.Buffer.NumBytes = 1;
+        Result.Buffer.Data = Parser->JsonToParse.Data + LocalCursor;
         u8 NextChar = Parser->JsonToParse.Data[LocalCursor];
 
         switch(NextChar)
@@ -476,7 +475,7 @@ ConvertJsonNumber(struct buffer Source, u64 *CursorInJsonString)
         u8 ConvertToBinary = Source.Data[LocalCursor] - (u8)'0';
         if(ConvertToBinary < 10)
         {
-            Result = 10.0f*Result + (f64)ConvertToBinary;
+            Result = 10.0*Result + (f64)ConvertToBinary;
             ++LocalCursor;
         }
         else
@@ -510,14 +509,14 @@ ConvertJsonStringToF64(struct json_element *JsonObject, struct buffer Key)
         if(IsInBounds(Source, LocalCursor) && (Source.Data[LocalCursor] == '.'))
         {
             ++LocalCursor;
-            f64 Coefficient = 1.0f / 10.0f;
+            f64 Coefficient = 1.0 / 10.0;
             while(IsInBounds(Source, LocalCursor))
             {
                 u8 ConvertToBinary = Source.Data[LocalCursor] - (u8)'0';
                 if(ConvertToBinary < 10)
                 {
-                    Number = Number + Coefficient* (f64)ConvertToBinary;
-                    Coefficient *= 1.0f / 10.0f;
+                    Number = Number + Coefficient * (f64)ConvertToBinary;
+                    Coefficient *= 1.0 / 10.0;
                     ++LocalCursor;
                 }
                 else
@@ -540,15 +539,15 @@ ConvertJsonStringToF64(struct json_element *JsonObject, struct buffer Key)
 
             // In the case that there was a minus sign for the expontent, the above check for '+'
             //      would have been skipped, and we'd be pointing at it now; ConvertJsonSign
-            //      would properly return -1.0f.
+            //      would properly return -1.0.
             //
             //  In the case that there was no sign, we'd be pointing at a number here. But that's 
             //      OK, because in the case that the value at LocalCursor is not a '-', ConvertJsonNumber
-            //      just returns 1.0f, and does not advance the cursor. 
+            //      just returns 1.0 and does not advance the cursor. 
             //      So the call itself and the multiply below with ExponentSign as an operand have no effect.
             f64 ExponentSign = ConvertJsonSign(Source, &LocalCursor);
             f64 Exponent = ExponentSign*ConvertJsonNumber(Source, &LocalCursor);
-            Number *= pow(10.0f, Exponent);
+            Number *= pow(10.0, Exponent);
         }
 
         Result = Sign * Number;

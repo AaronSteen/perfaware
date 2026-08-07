@@ -3,7 +3,6 @@
 // For each, generate count / 5 pairs
 // Write the pairs to JSON
 #include "common.h"
-#include "functions.c"
 
 struct random_series
 {
@@ -247,7 +246,7 @@ main(int ArgCount, char **ArgumentVector)
             YRadius = RandomInRange(&Series, 0, MaxLatitude);
         }
         
-        struct pair Pair;
+        struct haversine_pair Pair;
         Pair.X0 = RandomDegree(&Series, XCenter, XRadius, MaxLongitude);
         Pair.Y0 = RandomDegree(&Series, YCenter, YRadius, MaxLatitude);
         Pair.X1 = RandomDegree(&Series, XCenter, XRadius, MaxLongitude);
