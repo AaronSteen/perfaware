@@ -77,7 +77,7 @@ IsJsonWhitespace(struct buffer Buffer, u64 Cursor)
 struct json_token
 GetJsonToken(struct json_parser *Parser)
 {
-    struct json_token Result = {0};
+    struct json_token Result = {};
     struct buffer JsonToParse = Parser->JsonToParse;
     u64 LocalCursor = Parser->Cursor;
 

@@ -1,0 +1,58 @@
+old
+    int main()
+    {
+        u64 Prof_Begin = 0;
+        u64 Prof_Read = 0;
+        u64 Prof_MiscSetup = 0;
+        u64 Prof_Parse = 0;
+        u64 Prof_Sum = 0;
+        u64 Prof_MiscOutput = 0;
+        u64 Prof_End = 0;
+
+        ...
+
+        Prof_Begin = ReadCpuTimer();
+
+        int Result = 1;
+
+        if ((ArgCount == 2) || (ArgCount == 3)) {
+            Prof_Read = ReadCpuTimer();
+            buffer InputJson = ReadEntireFile[1]));
+            Prof_MiscSetup = ReadCpuTimer();
+        }
+
+        Prof_End = ReadCpuTimer();
+
+        u64 TotalCpuElapsed = Prof_End - Prof_Begin;
+        u64 CpuFreq = EstimateCpuTimerFreq();
+
+        if (CpuFreq) {
+            printf("Total time: %0.4ms (Cpu freq %llu)", 1000.0 * (f64)TotalCpuElapsed / (f64)CpuFreq, CpuFreq);
+        }
+
+        // Subtract A from B for time elapsed between each read point
+        PrintTimeElapsed("Startup", TotalCpuElapsed, Prof_Begin, Prof_Read);
+        PrintTimeElapsed("Read", TotalCpuElapsed, Prof_Read, Prof_MiscSetup);
+        ...
+        PrintTimeElapsed("MiscOutput", TotalCpuElapsed, Prof_MiscOutput, Prof_End);
+    }
+
+Assignment:
+    TimeFunction macro at the top of the function.
+        - tell profiling utility to read the TSC at the beginning and end of
+            the function, and report the difference as the profile
+            line for the function.
+    BeginProfile() function at the top of main.
+    if (Result == 0) {
+        EndAndPrintProfile();
+    }
+    TimeBlock macro which allows us to pass a name.
+    return Result;
+
+what lives in GlobalTimings?
+Approach A:
+    Only struct with label, Begin time, End time.
+
+
+
+
