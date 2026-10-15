@@ -1,7 +1,6 @@
 #define _CRT_SECURE_NO_WARNINGS
 #define MAX_TIMED_SCOPES 256
 #define MAX_STRING_LEN 512
-#define ENTIRE "Entire"
 
 #include <sys/stat.h>
 #include "common.h"
@@ -15,20 +14,23 @@ struct timed_scope
     u64 End;
 };
 
+static timed_scope gEntire;
 static timed_scope gTimedScopes[MAX_TIMED_SCOPES * 2];
+static int gIdx;
 
 struct timer
 {
     u64 Start;
     char const *Label;
+    int Idx;
 
-    timer(char const *Label) : Start(ReadCpuTimer()), Label(Label)
+    timer(char const *Label) : Start(ReadCpuTimer()), Label(Label), Idx(gIdx++)
     {
     }
 
     ~timer() 
     {
-        gTimedScopes[__COUNTER__] = {Label, Start, ReadCpuTimer()};
+        gTimedScopes[Idx] = {Label, Start, ReadCpuTimer()};
     }
 };
 
@@ -43,31 +45,29 @@ GetElapsed(u64 Start, u64 End)
 }
 
 static void
-BeginProfile(void)
+BeginProfile()
 {
-    gTimedScopes[__COUNTER__] = {ENTIRE, ReadCpuTimer(), 0};
+    gEntire = {"Entire", ReadCpuTimer(), 0};
 }
 
 static void
 EndAndPrintProfile(void)
 {
-    gTimedScopes[0].End = ReadCpuTimer();
-    int NumRecorded = __COUNTER__;
-    if (NumRecorded >= MAX_TIMED_SCOPES) {
-        DebugOutput("Error: Max timed scopes was %d, but recorded %d. Aborting.", MAX_TIMED_SCOPES, NumRecorded);
+    gEntire.End = ReadCpuTimer();
+    if (gIdx > MAX_TIMED_SCOPES) {
+        DebugOutput("Error: Max timed scopes was %d, but recorded %d. Aborting.", MAX_TIMED_SCOPES, gIdx);
     }
     else {
-        Assert(strncmp(gTimedScopes[0].Label, ENTIRE, MAX_STRING_LEN) == 0);
         u64 CpuFreq = GuessCpuFreq();
-        u64 TotalElapsed = GetElapsed(gTimedScopes[0].Start, gTimedScopes[0].End);
+        u64 TotalElapsed = GetElapsed(gEntire.Start, gEntire.End);
         f64 MsElapsed = (f64)TotalElapsed / CpuFreq * 1000.0;
         DebugOutput("Total time: %.4fms (Cpu freq %llu)", MsElapsed, CpuFreq);
-        for (int NthScope = 1; NthScope < NumRecorded; ++NthScope) {
+        for (int NthScope = 0; NthScope < gIdx; ++NthScope) {
             timed_scope *pScope = &gTimedScopes[NthScope];
-            Assert(pScope->Start > gTimedScopes[0].Start);
-            Assert(pScope->End < gTimedScopes[0].End);
-            f64 NthScopeElapsed = GetElapsed(pScope->Start, pScope->End);
-            DebugOutput("    %s: %llu (%1.2f%)", pScope->Label, NthScopeElapsed, (f64)NthScopeElapsed / (f64)TotalElapsed);
+            Assert(pScope->Start > gEntire.Start);
+            Assert(pScope->End < gEntire.End);
+            u64 NthScopeElapsed = GetElapsed(pScope->Start, pScope->End);
+            DebugOutput("    %s: %llu (%.2f%%)", pScope->Label, NthScopeElapsed, (f64)NthScopeElapsed / (f64)TotalElapsed * 100.0);
         }
     }
 }
@@ -265,7 +265,7 @@ main(int ArgCount, char **ArgVector)
         u64 NumAnswers = (Answers.NumBytes - sizeof(f64)) / sizeof(f64);
         if(NumAnswers != JsonPairCount)
         {
-            OutputErrorMessage("Error: Number of pairs found in json, %ld, did not match number of answers, %ld, in answers file", JsonPairCount, NumAnswers);
+            OutputErrorMessage("Error: Number of pairs found in json, %llu, did not match number of answers, %llu, in answers file", JsonPairCount, NumAnswers);
             exit(1);
         }
 
