@@ -1,0 +1,98 @@
+I have updated the project context to contain the lecture on profiling recursive blocks, as well as the version of Casey's profiler that is a self-contained module.
+
+I want to ensure my understanding of how the profiler works is correct before moving forward, specifically focusing on the purpose of each of the "TSC" (hereafter "Tsc", and i will refer to Tsc == 1 as a "tick") members of the profile_anchor struct. I will work backward from why they were added in the first place. Please do not correct minor syntax errors or mistakes (except in one specific case i call out below!) in variable names or terminology; I am interested in the general codepath of the profiler.
+
+The profiler works by dropping profile_block timers into scopes we want to profile. When the scope exits, profile_block writes to a global array of struct profile_anchors. In the initial version, we only captured a TscElapsed value that represented an accumulator for ticks elapsed during that anchor in the program.
+
+struct profile_anchor
+{
+    char const *Label;
+    u64 TscElapsed;
+    u64 HitCount;
+};
+
+However, in cases where we wanted to profile a scope B that represented a subscope of scope A, we found that subscope B would be counted twice: once in the accounting of ticks for subscope B, and once for an accounting of ticks for scope A. Therefore, a "TscElapsedChildren" field was introduced to profile_anchor, and profile_block was updated to store a separate accounting of ticks for any child scopes. For example, if scope A contained a child scope B, and scope B contained child scopes C and D, C and D would write to TscElapsedChildren for scope B, allowing us to isolate time in scope B exclusive of time spent in the child scopes C and D. However, when B exits, it writes its total elapsed time to the TscElapsedChildren value for A, which is defined to be the sum of all time spent in B, inclusive of time in C and D; this allows us to similarly compute exclusive and inclusive values for A, etc. So now profile_anchor looks like this:
+
+struct profile_anchor
+{
+    char const *Label;
+    u64 TscElapsed;
+    u64 TscElapsedChildren;
+    u64 HitCount;
+};
+
+The profiler at this point still did not properly account for time spent in scope A if scope B itself contained a reentrant (is this correct useage of "reentrant"? It feels wrong to say "recursive" here since the second call to A's codepath does not directly follow it) call to the codepath profiled with the anchor that captures time in scope A. That is, say we have three scopes whose times are accumulated in T0, T1, and T2, and T0 lives in the outermost scope; i.e., its parentIdx is 0. T0 and T2 are captured by the profile_block writing to anchor A (with T1 captured by the block writing to anchor B). Addtionally, specify that T0 corresponds to Idx = 1 in the global anchors array. The following situation would occur:
+
+Scope A is entered and its profile_block does the following:
+    Stores gProfilerParent (my name for the global profile parent variable) value of 0 as its ParentIdx
+    Sets gProfilerParent to 1
+    Calls ReadCpuTimer() and stores the result in its StartTsc.
+
+        Then, scope B is entered as a subscope of A and its profile_block:
+            Stores gProfilerParent==1 as its ParentIdx
+            Sets gProfilerParent to 2
+            Calls ReadCpuTimer() and stores the result in its StartTsc.
+
+                Then, scope C is entered as a subscope of A, but scope C is a call to the codepath captured by the anchor corresponding to scope A:
+                    The profile_block for this codepath:
+                        Stores gProfilerParent value of 2 as its ParentIdx
+                        Sets gProfilerParent to 1
+                        Calls ReadCpuTimer() and stores the result in StartTsc.
+                    Scope C might enter B again or it might not, depending on the nature of the codepath, but when the profile_block is destroyed:
+                        Elapsed is computed as the difference between a new call to ReadCpuTimer() and StartTsc
+                        Elapsed is added to the TscElapsedChildren accumulator for anchor 2
+                        Elapsed is added to the TscElapsed accumulator for anchor 1, since anchor 1 corresponds to both scopes A and C
+                        gProfilerParent is set back to 2
+
+        Execution returns to scope B, and scope B is eventually exited. Its profile_block:
+            Computes an Elapsed value that represents all time spent in scope B, including time spent in scope C
+            Adds this Elapsed to the TscElapsed value for anchor 2
+            Adds this Elapsed to the TscElapsedChildren value for anchor 1
+
+    Execution returns to scope A and exits; its profile_block:
+        I'm actually confused here; what happens when Scope A exits, since its ParentIdx is 0? Does it write to the TscElapsedChildren for idx 0 of the anchors array anyway, but we always ignore the anchor at this index, so it doesn't matter?
+        Regardless, its computed Elapsed value is added to the TscElapsed value for anchor 1.
+
+The problem with this is that we want to know how much time was spent in the block for anchor 1, but we're double-counting again, since we update TscElapsed both when we exit scope C and scope A, but all of C transpired within A, so C's time is being counted twice. We somehow want to determine that A has exited and only increase anchor 1's accumulated ticks by the computed Elapsed value when A exits; we want to disregard the update to TscElapsed for anchor 1 made by scope C. The solution is to store a value TscElapsedAtRoot in the anchor, and have profile_block copy this locally into a variable OldElapsedAtRoot. When scope A is entered, we save this. Scope C is entered and does the same. Scope C exits and updates anchor 1's TscElapsedAtRoot with its own value, but when scope A is eventually exited, C's updates to this value are clobbered: A updates anchor 1's TscElapsedAtRoot to be whatever it was when scope A was entered, plus all the ticks that elapsed while scope A was active. Basically, it doesn't matter what happens inside a given scope, since when that scope exits, the final TscElapsedAtRoot value will contain the number of ticks that anchor had accumulated before that scope was entered, plus all the ticks that transpired during that scope.
+
+When we go to compute the exclusive time for anchor 1, i.e., less its children, we already have a correct computation. In the example above, we'd want this exclusive time to contain both ticks for scopes A and C, but no ticks for scope B. In effect, we want to take all the time in A, take out time in B, but add back in time in C, since A and C correspond to anchor 1. i.e., Ta - Tb + Tc. We essentially do this, but in reverse order: first C's time is added to anchor 1, then A's time when scope A exits. Then, when we go to compute the exclusive time for anchor 1, we subtract B's elapsed time from A. The effect is Tc + Ta - Tb, or, rearranged, Ta - Tb + Tc.
+
+Finally, Casey simplifies this by collapsing the three values into two: ElapsedExclusive and ElapsedInclusive. Exclusive is computed by, when a block closes, subtracting a sub-block's Elapsed time from its parent's Exclusive time, and adding that sub-block's Elapsed time to its associated anchor's exclusive time. and increasing its own corresponding anchor's inclusive time by summing its own Elapsed with its local OldTscElapsedInclusive variable.
+
+
+
+Parent 0
+
+    Parent 1, Anchor 1
+        profile_block():
+            Store ParentIdx 0
+            Store AnchorIdx 1
+            Set gProfilerParent to 1
+            Store OldTscElapsedInclusive
+            Snap timestamp
+
+            Parent 2, Anchor 2
+                profile_block():
+                    Store ParentIdx 1
+                    Store AnchorIdx 2
+                    Set gProfilerParent to 2
+                    Store OldTscElapsedInclusive
+                    Snap timestamp
+
+                    Parent 3, Anchor 1
+                        profile_block():
+                            Store ParentIdx 2
+                            Store AnchorIdx 1
+                            Set gProfilerParent to 3
+                            Store OldTscElapsedInclusive
+
+                        ~profile_block():
+                            Store Elapsed = ReadCpuCounter() - Start
+                            Set Parent 2's TscElapsedExclusive to -= Elapsed
+                            Set Anchor 1's TscElapsedExclusive to += Elapsed
+                            Set Anchor 1's TscElapsedInclusive to OldTscElapsedInclusive + Elapsed
+                            Increment hit count
+
+                ~profile_block
+
+

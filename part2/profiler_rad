@@ -1,0 +1,9 @@
+// raddbg 0.9.29 project file
+
+target:
+{
+  executable: "build/profiled_haversine_main.exe"
+  working_directory: build
+  enabled: 1
+  arguments: "\"W:\\pap\\part2\\input\\data_10000000_Output.json\" \"W:\\pap\\part2\\input\\data_10000000_ComputedHaversines.f64\""
+}

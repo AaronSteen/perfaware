@@ -1,97 +1,33 @@
-#define _CRT_SECURE_NO_WARNINGS
-#define MAX_TIMED_SCOPES 256
+#define MAX_ANCHORS 4096
 #define MAX_STRING_LEN 512
 
-#include <sys/stat.h>
 #include "common.h"
-#include "json_parser.c"
+#include <sys/stat.h>
+
 #include "platform_metrics.c"
+#include "prof.h"
 
-struct timed_scope
-{
-    const char *Label;
-    u64 Start;
-    u64 End;
-};
-
-static timed_scope gEntire;
-static timed_scope gTimedScopes[MAX_TIMED_SCOPES * 2];
-static int gIdx;
-
-struct timer
-{
-    u64 Start;
-    char const *Label;
-    int Idx;
-
-    timer(char const *Label) : Start(ReadCpuTimer()), Label(Label), Idx(gIdx++)
-    {
-    }
-
-    ~timer() 
-    {
-        gTimedScopes[Idx] = {Label, Start, ReadCpuTimer()};
-    }
-};
-
-static u64
-GetElapsed(u64 Start, u64 End)
-{
-    Assert(Start > 0);
-    Assert(End > 0);
-    Assert(End > Start);
-    u64 Result = End - Start;
-    return(Result);
-}
-
-static void
-BeginProfile()
-{
-    gEntire = {"Entire", ReadCpuTimer(), 0};
-}
-
-static void
-EndAndPrintProfile(void)
-{
-    gEntire.End = ReadCpuTimer();
-    if (gIdx > MAX_TIMED_SCOPES) {
-        DebugOutput("Error: Max timed scopes was %d, but recorded %d. Aborting.", MAX_TIMED_SCOPES, gIdx);
-    }
-    else {
-        u64 CpuFreq = GuessCpuFreq();
-        u64 TotalElapsed = GetElapsed(gEntire.Start, gEntire.End);
-        f64 MsElapsed = (f64)TotalElapsed / CpuFreq * 1000.0;
-        DebugOutput("Total time: %.4fms (Cpu freq %llu)", MsElapsed, CpuFreq);
-        for (int NthScope = 0; NthScope < gIdx; ++NthScope) {
-            timed_scope *pScope = &gTimedScopes[NthScope];
-            Assert(pScope->Start > gEntire.Start);
-            Assert(pScope->End < gEntire.End);
-            u64 NthScopeElapsed = GetElapsed(pScope->Start, pScope->End);
-            DebugOutput("    %s: %llu (%.2f%%)", pScope->Label, NthScopeElapsed, (f64)NthScopeElapsed / (f64)TotalElapsed * 100.0);
-        }
-    }
-}
-
-#define TimeFunction timer Timer(__func__)
-#define TimeBlock(Label) timer Timer(Label)
+#include "json_parser.c"
 
 struct buffer 
-ReadEntireFile(char *FileName)
+ReadAnswersFile(char *Filename)
 {
     TimeFunction;
-    // note we copied this from casey; he uses FileName here but
-    //      we use Filename (no capped "n") in our main function below
+    // This is copied verbtaim from Casey's "ReadEntireFile". We only use it to
+    //      read the Answers file. I think our "OpenAndInitJson" above is equivalent
+    //      his "ReadEntireFile" call that appears in his profiler printout,
+    //      but I don't want to take the time to verify ths right now (10/16/26)
     struct buffer Result = {};
 
-    FILE *File = fopen(FileName, "rb");
+    FILE *File = fopen(Filename, "rb");
     if(File)
     {
 #if _WIN32
         struct __stat64 Stat;
-        _stat64(FileName, &Stat);
+        _stat64(Filename, &Stat);
 #else
         struct stat Stat;
-        stat(FileName, &Stat);
+        stat(Filename, &Stat);
 #endif
 
         Result = AllocateBuffer(Stat.st_size);
@@ -99,7 +35,7 @@ ReadEntireFile(char *FileName)
         {
             if(fread(Result.Data, Result.NumBytes, 1, File) != 1)
             {
-                OutputErrorMessage("ERROR: Unable to read \"%s\".\n", FileName);
+                OutputErrorMessage("ERROR: Unable to read \"%s\".\n", Filename);
                 exit(1);
             }
         }
@@ -107,7 +43,7 @@ ReadEntireFile(char *FileName)
     }
     else
     {
-        OutputErrorMessage("ERROR: Unable to open \"%s\".\n", FileName);
+        OutputErrorMessage("ERROR: Unable to open \"%s\".\n", Filename);
         exit(1);
     }
 
@@ -117,6 +53,7 @@ ReadEntireFile(char *FileName)
 static void
 InitInputJson(struct json *Json)
 {
+    TimeFunction;
     if(Json->JsonToParse.NumBytes > GIGABYTES(2))
     {
         OutputErrorMessage("This utility only parses .json files of size %llu or smaller. You supplied a file of size %llu", GIGABYTES(2), Json->JsonToParse.NumBytes);
@@ -136,6 +73,14 @@ InitInputJson(struct json *Json)
         exit(1);
     }
     fclose(Json->FilePointer);
+}
+
+void
+OpenAndInitJson(json *Json)
+{
+    TimeFunction;
+    OpenJson(Json);
+    InitInputJson(Json);
 }
 
 static u64
@@ -219,8 +164,7 @@ main(int ArgCount, char **ArgVector)
     struct json Json;
     Json.Filename = Filename;
 
-    OpenJson(&Json);
-    InitInputJson(&Json);
+    OpenAndInitJson(&Json);
 
     // Validate json
     u32 MinBytesForJsonPair = 6 * 4;
@@ -258,7 +202,7 @@ main(int ArgCount, char **ArgVector)
             exit(1);
         }
 
-        struct buffer Answers = ReadEntireFile(AnswersFilename);
+        struct buffer Answers = ReadAnswersFile(AnswersFilename);
 
         // The final 8 bytes in the file comprise the computed average of the preceding f64s in the file. So don't
         //      take these last 8 bytes in the file into account when computing the number of answers in the file.
@@ -284,5 +228,5 @@ main(int ArgCount, char **ArgVector)
 
     EndAndPrintProfile();
     return(0);
-
 }
+ProfEndOfCompilationUnit;

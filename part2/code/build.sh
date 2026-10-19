@@ -24,14 +24,25 @@
 #                           C:\Users\ams56\work\beaver\code\beaver.cpp:142:17: error: use of undeclared identifier
 #
 
-# store the directory containing the script that's running right now, so we can use it in the next line.
+# store the directory containing the script that's running right now, so we can use it in the SCRIPT_WIN line below
 # this assumes that the batch script we're going to run to compile the program in command prompt
 #       is in the same directory as build.sh that we call (i.e., the script running right now,
 #       to start the whole process.)
 SCRIPT_DIR=$(dirname "$(realpath "$0")")
 
+BUILD="$(dirname "$SCRIPT_DIR")/build"
+CDB_HELPER="$HOME/.dotfiles/scripts/compile_commands.sh"
+if [ -f "$CDB_HELPER" ]; then
+    source "$CDB_HELPER"
+else
+    echo "note: $CDB_HELPER not found, skipping compile_commands.json"
+    write_compile_commands()      { :; }   # do-nothing stand-ins
+    write_compile_commands_msvc() { :; }
+fi
+
 # store the path to the build.bat we're going to call when we compile the program using command prompt
 SCRIPT_WIN=$(wslpath -w "$SCRIPT_DIR/build_wsl.bat")
+
 
 # open command prompt and run the script. pipe the output to sed.
 
@@ -41,4 +52,8 @@ cmd.exe /c "$SCRIPT_WIN" 2>&1 | sed \
     -e 's|\\|/|g' \
     -e 's|(\([0-9][0-9]*\),\([0-9][0-9]*\))|:\1:\2|g'
 
-exit ${PIPESTATUS[0]}
+STATUS=${PIPESTATUS[0]}   # must be read immediately after the pipeline above
+
+write_compile_commands_msvc "$BUILD" "$SCRIPT_DIR/profiled_haversine_main.cpp"
+
+exit $STATUS

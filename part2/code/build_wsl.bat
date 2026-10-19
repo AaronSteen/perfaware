@@ -3,7 +3,6 @@ set VCVARSALL=C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\
 set CLANGCL=C:\ProgramDirIMade\clang+llvm-21.1.4-x86_64-pc-windows-msvc\clang+llvm-21.1.4-x86_64-pc-windows-msvc\bin\clang-cl.exe
 set CODE=C:\Users\ams56\work\pap\part2\code
 set BUILD=C:\Users\ams56\work\pap\part2\build
-set SHARED=C:\Users\ams56\work\pap\part2\shared
 set CommonCompilerFlags=-MTd -nologo -GR- -EHa- -Od -Oi -WX -W4 -wd4201 -wd4100 -Wno-unused-function -Wno-writable-strings -wd4189 -Wno-unused-variable -Wno-sign-compare -Wno-missing-field-initializers -Wno-missing-braces -Wno-unused-but-set-variable -FC -Z7
 set CommonLinkerFlags=-opt:ref -incremental:no /DEBUG
 
@@ -11,8 +10,10 @@ call "%VCVARSALL%" x64 > NUL 2>&1
 if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 
 if not exist %BUILD% mkdir %BUILD%
+echo %CommonCompilerFlags%> %BUILD%\clangd_flags.txt
+echo %INCLUDE%> %BUILD%\clangd_include.txt
 pushd %BUILD%
-"%CLANGCL%" /I%SHARED% %CommonCompilerFlags% %CODE%\haversine_main.c /link %CommonLinkerFlags% /OUT:haversine_main.exe
+"%CLANGCL%" %CommonCompilerFlags% %CODE%\profiled_haversine_main.cpp /link %CommonLinkerFlags% /OUT:profiled_haversine_main.exe
 if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
-echo haversine_main.exe: OK
+echo profiled_haversine_main.exe: OK
 popd
