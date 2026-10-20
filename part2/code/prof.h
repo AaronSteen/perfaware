@@ -1,7 +1,7 @@
 #define MAX_ANCHORS 4096
 
-#ifndef PROF
-#define PROF 1
+#ifndef PROFILER
+#define PROFILER 0
 #endif
 
 #if PROFILER
@@ -30,7 +30,7 @@ struct profile_block
         AnchorIdx = AnchorIdx_;
         Label = Label_;
         gProfilerParent = AnchorIdx;
-        OldTscElapsedInclusive = gProfiler.Anchors[AnchorIdx].TscElapsedInclusive;
+        OldTscElapsedInclusive = gProfileAnchors[AnchorIdx].TscElapsedInclusive;
         StartTsc = ReadCpuTimer();
     }
 
@@ -39,8 +39,8 @@ struct profile_block
         u64 Elapsed = ReadCpuTimer() - StartTsc;
         gProfilerParent = ParentIdx;
 
-        profile_anchor *pParent = gProfiler.Anchors + ParentIdx;
-        profile_anchor *pAnchor = gProfiler.Anchors + AnchorIdx;
+        profile_anchor *pParent = gProfileAnchors + ParentIdx;
+        profile_anchor *pAnchor = gProfileAnchors + AnchorIdx;
 
         pParent->TscElapsedExclusive -= Elapsed;
         pAnchor->TscElapsedExclusive += Elapsed;
@@ -54,7 +54,7 @@ struct profile_block
 #define NameConcat2(A, B) A##B
 #define NameConcat(A, B) NameConcat2(A, B)
 #define TimeBlock(Name) profile_block NameConcat(Block, __LINE__)(Name, __COUNTER__ + 1);
-#define ProfilerEndofCompilationUnit static_assert(__COUNTER__ < ArrayCount(GlobalProfilerAnchors), "Number of profile points exceeds size of profiler::Anchors array")
+#define ProfilerEndOfCompilationUnit static_assert(__COUNTER__ < ArrayCount(gProfileAnchors), "Number of profile points exceeds size of profiler::Anchors array")
 
 // Will expand to, e.g.
 //     profile_block Block176(__func__, 2 + 1);; (TimeFunction)
@@ -81,8 +81,8 @@ struct profile_block
 //      {
 //          u64 Elapsed = ReadCpuTimer() - StartTsc;
 //          gProfilerParent = ParentIdx;
-//          profile_anchor *pParent = gProfiler.Anchors + ParentIdx;
-//          profile_anchor *pAnchor = gProfiler.Anchors + AnchorIdx;
+//          profile_anchor *pParent = gProfileAnchors + ParentIdx;
+//          profile_anchor *pAnchor = gProfileAnchors + AnchorIdx;
 //          pParent->TscElapsedChildren += Elapsed;
 //          pAnchor->TscElapsed += Elapsed;
 //          ++pAnchor->HitCount;
@@ -92,7 +92,7 @@ struct profile_block
 //      gProfilerParent is restored to ParentIdx, and pParent's Elapsed children is updated.
 
 static void
-PrintTimeElapsed(profile_anchor *pAnchor, u64 TotalElapsed)
+PrintTimeElapsed(u64 TotalElapsed, profile_anchor *pAnchor)
 {
     f64 ExclusivePercent = 100.0 * (f64)pAnchor->TscElapsedExclusive / (f64)TotalElapsed;
     if (pAnchor->TscElapsedExclusive != pAnchor->TscElapsedInclusive) {
@@ -110,7 +110,7 @@ PrintAnchorData(u64 TotalCpuElapsed)
 {
     for (int AnchorIdx = 1; AnchorIdx < ArrayCount(gProfileAnchors); ++AnchorIdx) {
         profile_anchor *pAnchor = gProfileAnchors + AnchorIdx;
-        if (pAnchor->TscElapsedInsclusive) {
+        if (pAnchor->TscElapsedInclusive) {
             PrintTimeElapsed(TotalCpuElapsed, pAnchor);
         }
     }
@@ -120,7 +120,7 @@ PrintAnchorData(u64 TotalCpuElapsed)
 
 #define TimeBlock(...)
 #define PrintAnchorData(...)
-#define ProfEndOfCompilationUnit
+#define ProfilerEndOfCompilationUnit
 
 #endif
 

@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 
 #include "platform_metrics.c"
+// #define PROFILER 1
 #include "prof.h"
 
 #include "json_parser.c"
@@ -53,7 +54,6 @@ ReadAnswersFile(char *Filename)
 static void
 InitInputJson(struct json *Json)
 {
-    TimeFunction;
     if(Json->JsonToParse.NumBytes > GIGABYTES(2))
     {
         OutputErrorMessage("This utility only parses .json files of size %llu or smaller. You supplied a file of size %llu", GIGABYTES(2), Json->JsonToParse.NumBytes);
@@ -117,7 +117,10 @@ ParseHaversinePairs(struct buffer *HaversinePairs, struct json *Json, u64 MaxPai
         }
     }
 
-    FreeJson(ParsedJson);
+    {
+        TimeBlock("FreeJson");
+        FreeJson(ParsedJson);
+    }
 
     return(PairCount);
 }
@@ -229,4 +232,4 @@ main(int ArgCount, char **ArgVector)
     EndAndPrintProfile();
     return(0);
 }
-ProfEndOfCompilationUnit;
+ProfilerEndOfCompilationUnit;

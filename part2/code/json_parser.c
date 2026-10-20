@@ -42,7 +42,6 @@ struct json_element
 bool
 IsInBounds(struct buffer Buffer, u64 Cursor)
 {
-    TimeFunction;
     bool Result = ((Buffer.Data + Cursor) < (Buffer.Data + Buffer.NumBytes));
 
     return(Result);
@@ -51,7 +50,6 @@ IsInBounds(struct buffer Buffer, u64 Cursor)
 bool
 IsJsonDigit(struct buffer Buffer, u64 Cursor)
 {
-    TimeFunction;
     bool Result = false;
     if(IsInBounds(Buffer, Cursor))
     {
@@ -65,7 +63,6 @@ IsJsonDigit(struct buffer Buffer, u64 Cursor)
 bool 
 IsJsonWhitespace(struct buffer Buffer, u64 Cursor)
 {
-    TimeFunction;
     bool Result = false;
     if(IsInBounds(Buffer, Cursor))
     {
@@ -80,7 +77,6 @@ IsJsonWhitespace(struct buffer Buffer, u64 Cursor)
 struct json_token
 GetJsonToken(struct json_parser *Parser)
 {
-    TimeFunction;
     struct json_token Result = {};
     struct buffer JsonToParse = Parser->JsonToParse;
     u64 LocalCursor = Parser->Cursor;
@@ -245,7 +241,6 @@ GetJsonToken(struct json_parser *Parser)
 bool
 ShouldKeepParsing(struct json_parser Parser)
 {
-    TimeFunction;
     bool Result = (!Parser.HadError && IsInBounds(Parser.JsonToParse, Parser.Cursor));
 
     return(Result);
@@ -258,7 +253,6 @@ ParseJsonContainer(struct json_parser *Parser, struct json_token StartingToken, 
 struct json_element *
 ParseJsonElement(struct json_parser *Parser, struct buffer KeyIfItExists, struct json_token InitialToken)
 {
-    TimeFunction;
     bool Valid = true;
     struct json_element *FirstSubElementForThisContainer = 0;
 
@@ -299,7 +293,6 @@ ParseJsonElement(struct json_parser *Parser, struct buffer KeyIfItExists, struct
 struct json_element *
 ParseJsonContainer(struct json_parser *Parser, struct json_token StartingToken, enum json_token_type EndingTokenShouldBe, bool IsKeyValue)
 {
-    TimeFunction;
     struct json_element *FirstElementInContainer = {};
     struct json_element *LastElementInContainer = {};
 
@@ -398,7 +391,6 @@ ParseJsonContainer(struct json_parser *Parser, struct json_token StartingToken, 
 bool
 AreBuffersEqual(struct buffer A, struct buffer B)
 {
-    TimeFunction;
     if(A.NumBytes != B.NumBytes)
     {
         return false;
@@ -420,7 +412,6 @@ AreBuffersEqual(struct buffer A, struct buffer B)
 struct json_element *
 LookUpJsonElement(struct json_element *Object, struct buffer Key)
 {
-    TimeFunction;
     struct json_element *Result = 0;
 
     if(Object)
@@ -457,7 +448,6 @@ ParseJson(struct json *Json)
 f64
 ConvertJsonSign(struct buffer Source, u64 *CursorInJsonString)
 {
-    TimeFunction;
     u64 LocalCursor = *CursorInJsonString;
 
     f64 Result = 1.0;
@@ -478,7 +468,6 @@ ConvertJsonSign(struct buffer Source, u64 *CursorInJsonString)
 f64
 ConvertJsonNumber(struct buffer Source, u64 *CursorInJsonString)
 {
-    TimeFunction;
     u64 LocalCursor = *CursorInJsonString;
 
     f64 Result = 0;
@@ -504,7 +493,6 @@ ConvertJsonNumber(struct buffer Source, u64 *CursorInJsonString)
 f64
 ConvertJsonStringToF64(struct json_element *JsonObject, struct buffer Key)
 {
-    TimeFunction;
     f64 Result = 0;
 
     struct json_element *Element = LookUpJsonElement(JsonObject, Key);
@@ -582,7 +570,6 @@ ConvertJsonStringToF64(struct json_element *JsonObject, struct buffer Key)
 void
 FreeJson(struct json_element *Node)
 {
-    TimeFunction;
     while(Node)
     {
         struct json_element *FreeNode = Node;
