@@ -1,0 +1,161 @@
+#define MAX_ANCHORS 4096
+#define MAX_STRING_LEN 512
+
+#include "common.h"
+#include <sys/stat.h>
+
+#include "platform_metrics.c"
+#define PROFILER 1
+// #define READ_BLOCK_TIMER ReadOsTimer
+#include "prof.h"
+
+#include "json_parser.c"
+
+static buffer 
+ReadEntireFile(char *Filename)
+{
+    TimeFunction;
+    // This is copied verbtaim from Casey's "ReadEntireFile". We only use it to
+    //      read the Answers file. I think our "OpenAndInitJson" above is equivalent
+    //      his "ReadEntireFile" call that appears in his profiler printout,
+    //      but I don't want to take the time to verify ths right now (10/16/26)
+    struct buffer Result = {};
+
+    FILE *File = fopen(Filename, "rb");
+    if(File)
+    {
+#if _WIN32
+        struct __stat64 Stat;
+        _stat64(Filename, &Stat);
+#else
+        struct stat Stat;
+        stat(Filename, &Stat);
+#endif
+
+        Result = AllocateBuffer(Stat.st_size);
+        if(Result.Data)
+        {
+            TimeBandwidth("fread", Result.NumBytes);
+            if(fread(Result.Data, Result.NumBytes, 1, File) != 1)
+            {
+                OutputErrorMessage("ERROR: Unable to read \"%s\".\n", Filename);
+                exit(1);
+            }
+        }
+        fclose(File);
+    }
+    else
+    {
+        OutputErrorMessage("ERROR: Unable to open \"%s\".\n", Filename);
+        exit(1);
+    }
+
+    return Result;
+}
+
+static f64
+SumHaversineDistances(u64 PairCount, struct buffer *HaversinePairsBuffer)
+{
+    TimeBandwidth(__func__, PairCount*sizeof(haversine_pair));
+
+    struct haversine_pair *Pairs = (struct haversine_pair *)HaversinePairsBuffer->Data;
+    f64 Result = 0;
+    for(u64 PairIdx = 0; 
+        PairIdx < PairCount;
+        ++PairIdx)
+    {
+        struct haversine_pair Pair = Pairs[PairIdx];
+        f64 Computation = Haversine(Pair);
+        Result += Computation;
+    }
+
+    return(Result);
+}
+
+int
+main(int ArgCount, char **ArgVector)
+{
+    BeginProfile();
+    // Check usage
+    if(!((ArgCount == 2) || (ArgCount == 3)))
+    {
+        OutputErrorMessage("Either two or three arguments required, but %d was/were supplied", ArgCount);
+        exit(1);
+    }
+
+    char *Filename = ArgVector[1];
+    char *Extension = GetFileExtension(Filename);
+    if(strcmp(Extension, ".json") != 0)
+    {
+        OutputErrorMessage("This utility only parses .json files. You supplied a file with extension %s", Extension);
+        exit(1);
+    }
+
+
+    // Init json
+    buffer InputJson = ReadEntireFile(Filename);
+
+    // Validate json
+    u32 MinBytesForJsonPair = 6 * 4;
+    u64 MaxPairCount = InputJson.NumBytes / MinBytesForJsonPair;
+    if(MaxPairCount == 0)
+    {
+        OutputErrorMessage("Input json file contained no data");
+        exit(1);
+    }
+
+    // Alloc pairs memory
+    buffer HaversinePairs = AllocateBuffer(sizeof(struct haversine_pair) * MaxPairCount);
+
+    // Parse
+    u64 JsonPairCount = ParseHaversinePairs(&HaversinePairs, InputJson, MaxPairCount);
+
+    // Compute
+    f64 JsonSum = SumHaversineDistances(JsonPairCount, &HaversinePairs);
+    f64 JsonAverage = JsonSum / (f64)JsonPairCount;
+
+    DebugOutput("\n\n");
+    DebugOutput("Input size: %llu", InputJson.NumBytes);
+    DebugOutput("Pair count: %llu", JsonPairCount);
+    DebugOutput("Haversine sum: %.16f", JsonSum);
+
+    // Validate computation
+    DebugOutput("Avg. Haversine for json pairs: %.16f\n", JsonAverage);
+    if(ArgCount == 3)
+    {
+        char *AnswersFilename = ArgVector[2];
+        char *AnswersExtension = GetFileExtension(AnswersFilename);
+        if(strcmp(AnswersExtension, ".f64") != 0)
+        {
+            OutputErrorMessage("Need .f64 file for second argument. You provided file with extension %s", AnswersExtension);
+            exit(1);
+        }
+
+        buffer Answers = ReadEntireFile(AnswersFilename);
+
+        // The final 8 bytes in the file comprise the computed average of the preceding f64s in the file. So don't
+        //      take these last 8 bytes in the file into account when computing the number of answers in the file.
+        u64 NumAnswers = (Answers.NumBytes - sizeof(f64)) / sizeof(f64);
+        if(NumAnswers != JsonPairCount)
+        {
+            OutputErrorMessage("Error: Number of pairs found in json, %llu, did not match number of answers, %llu, in answers file", JsonPairCount, NumAnswers);
+            exit(1);
+        }
+
+        f64 *AnswerData = (f64 *)Answers.Data;
+        f64 AnswersAverage = AnswerData[NumAnswers]; // NumAnswers is the total number of f64s in the file less 1,
+                                                     //         so using it to index into a 0-indexed file will point to the last f64 in the file
+        DebugOutput("\nValidation");
+        DebugOutput("==============");
+        DebugOutput("Reference average: %.16f", AnswersAverage);
+        DebugOutput("Difference: %.16f", JsonAverage - AnswersAverage);
+        DebugOutput("\n\n");
+    }
+
+    if(HaversinePairs.Data) free((void *)HaversinePairs.Data);
+    if(InputJson.Data) free((void *)InputJson.Data);
+
+    EndAndPrintProfile();
+    return(0);
+}
+ProfilerEndOfCompilationUnit;
