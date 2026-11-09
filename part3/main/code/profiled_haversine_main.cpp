@@ -15,10 +15,6 @@ static buffer
 ReadEntireFile(char *Filename)
 {
     TimeFunction;
-    // This is copied verbtaim from Casey's "ReadEntireFile". We only use it to
-    //      read the Answers file. I think our "OpenAndInitJson" above is equivalent
-    //      his "ReadEntireFile" call that appears in his profiler printout,
-    //      but I don't want to take the time to verify ths right now (10/16/26)
     struct buffer Result = {};
 
     FILE *File = fopen(Filename, "rb");
@@ -35,8 +31,8 @@ ReadEntireFile(char *Filename)
         Result = AllocateBuffer(Stat.st_size);
         if(Result.Data)
         {
-            TimeBandwidth("fread", Result.NumBytes);
-            if(fread(Result.Data, Result.NumBytes, 1, File) != 1)
+            TimeBandwidth("fread", Result.Count);
+            if(fread(Result.Data, Result.Count, 1, File) != 1)
             {
                 OutputErrorMessage("ERROR: Unable to read \"%s\".\n", Filename);
                 exit(1);
@@ -97,7 +93,7 @@ main(int ArgCount, char **ArgVector)
 
     // Validate json
     u32 MinBytesForJsonPair = 6 * 4;
-    u64 MaxPairCount = InputJson.NumBytes / MinBytesForJsonPair;
+    u64 MaxPairCount = InputJson.Count / MinBytesForJsonPair;
     if(MaxPairCount == 0)
     {
         OutputErrorMessage("Input json file contained no data");
@@ -115,7 +111,7 @@ main(int ArgCount, char **ArgVector)
     f64 JsonAverage = JsonSum / (f64)JsonPairCount;
 
     DebugOutput("\n\n");
-    DebugOutput("Input size: %llu", InputJson.NumBytes);
+    DebugOutput("Input size: %llu", InputJson.Count);
     DebugOutput("Pair count: %llu", JsonPairCount);
     DebugOutput("Haversine sum: %.16f", JsonSum);
 
@@ -135,7 +131,7 @@ main(int ArgCount, char **ArgVector)
 
         // The final 8 bytes in the file comprise the computed average of the preceding f64s in the file. So don't
         //      take these last 8 bytes in the file into account when computing the number of answers in the file.
-        u64 NumAnswers = (Answers.NumBytes - sizeof(f64)) / sizeof(f64);
+        u64 NumAnswers = (Answers.Count - sizeof(f64)) / sizeof(f64);
         if(NumAnswers != JsonPairCount)
         {
             OutputErrorMessage("Error: Number of pairs found in json, %llu, did not match number of answers, %llu, in answers file", JsonPairCount, NumAnswers);

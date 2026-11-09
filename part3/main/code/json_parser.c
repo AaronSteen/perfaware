@@ -42,7 +42,7 @@ struct json_element
 bool
 IsInBounds(struct buffer Buffer, u64 Cursor)
 {
-    bool Result = ((Buffer.Data + Cursor) < (Buffer.Data + Buffer.NumBytes));
+    bool Result = ((Buffer.Data + Cursor) < (Buffer.Data + Buffer.Count));
 
     return(Result);
 }
@@ -88,7 +88,7 @@ GetJsonToken(struct json_parser *Parser)
 
     if(IsInBounds(JsonToParse, LocalCursor))
     {
-        Result.Buffer.NumBytes = 1;
+        Result.Buffer.Count = 1;
         Result.Buffer.Data = Parser->JsonToParse.Data + LocalCursor;
         u8 NextChar = Parser->JsonToParse.Data[LocalCursor];
 
@@ -147,7 +147,7 @@ GetJsonToken(struct json_parser *Parser)
                               ++LocalCursor;
                           }
 
-                          Result.Buffer.NumBytes = LocalCursor - StringStart;
+                          Result.Buffer.Count = LocalCursor - StringStart;
                           Result.Buffer.Data = JsonToParse.Data + StringStart;
                           if(IsInBounds(JsonToParse, LocalCursor+1))
                           {
@@ -227,7 +227,7 @@ GetJsonToken(struct json_parser *Parser)
                               }
                           }
 
-                          Result.Buffer.NumBytes = LocalCursor - NumberStart;
+                          Result.Buffer.Count = LocalCursor - NumberStart;
                       } break;
 
         }
@@ -391,13 +391,13 @@ ParseJsonContainer(struct json_parser *Parser, struct json_token StartingToken, 
 bool
 AreBuffersEqual(struct buffer A, struct buffer B)
 {
-    if(A.NumBytes != B.NumBytes)
+    if(A.Count != B.Count)
     {
         return false;
     }
 
     for(u64 Cursor = 0;
-        Cursor < A.NumBytes;
+        Cursor < A.Count;
         ++Cursor)
     {
         if(A.Data[Cursor] != B.Data[Cursor])

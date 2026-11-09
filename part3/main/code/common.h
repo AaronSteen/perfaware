@@ -27,7 +27,7 @@ typedef int32_t b32;
 
 struct buffer
 {
-    size_t NumBytes;
+    size_t Count;
     u8 *Data;
 };
 
@@ -174,7 +174,7 @@ AllocateBuffer(size_t NumBytes)
     Result.Data = (u8 *)malloc(NumBytes);
     if(Result.Data)
     {
-        Result.NumBytes = NumBytes;
+        Result.Count = NumBytes;
         return(Result);
     }
     else
