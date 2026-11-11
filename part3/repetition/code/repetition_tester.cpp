@@ -1,3 +1,6 @@
+#pragma once
+#include "repetition.h"
+
 enum test_mode : u32
 {
     TestMode_Uninitialized,

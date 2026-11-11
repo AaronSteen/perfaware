@@ -183,3 +183,13 @@ AllocateBuffer(size_t NumBytes)
         exit(1);
     }
 }
+
+static void 
+FreeBuffer(buffer *pBuffer)
+{
+    if(pBuffer->Data)
+    {
+        free(pBuffer->Data);
+    }
+    *pBuffer = {};
+}

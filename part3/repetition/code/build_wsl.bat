@@ -14,7 +14,7 @@ set CLANGCL=C:\ProgramDirIMade\clang+llvm-21.1.4-x86_64-pc-windows-msvc\clang+ll
 set CODE=C:\Users\ams56\work\pap\part3\repetition\code
 set BUILD=C:\Users\ams56\work\pap\part3\repetition\build
 rem Optimization flag deliberately NOT in here; it's added per build as %OptFlag%
-set CommonCompilerFlags=-MTd -nologo -GR- -EHa- -Oi -WX -W4 -wd4201 -wd4100 -Wno-unused-function -Wno-writable-strings -wd4189 -Wno-unused-variable -Wno-sign-compare -Wno-missing-field-initializers -Wno-missing-braces -Wno-unused-but-set-variable -FC -Z7
+set CommonCompilerFlags= -nologo -GR- -EHa- -Oi -WX -W4 -wd4201 -wd4100 -Wno-unused-function -Wno-writable-strings -wd4189 -Wno-unused-variable -Wno-sign-compare -Wno-missing-field-initializers -Wno-missing-braces -Wno-unused-but-set-variable -FC -Z7
 set CommonLinkerFlags=-opt:ref -incremental:no /DEBUG
 set IncludeDirs=-I C:\Users\ams56\work\pap\part3\main\code 
 

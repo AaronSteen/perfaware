@@ -1,13 +1,4 @@
-#define _CRT_SECURE_NO_WARNINGS
-
-#include <sys/stat.h>
-
-#define MAX_STRING_LEN 512
-#include "common.h"
-#include "platform_metrics.c"
-#include "repetition_tester.cpp"
-#include "read_overhead_test.cpp"
-
+#include "repetition.h"
 
 struct test_function
 {
@@ -41,16 +32,23 @@ main(int ArgC, char **ArgV)
         Params.pFilename = pFilename;
 
         if (Params.Dest.Count > 0) {
-            repetition_tester Testers[ArrayCount(TestFunctions)] = {};
-
-            for (;;) {
+            repetition_tester Testers[ArrayCount(TestFunctions)][AllocType_Count] = {};
+            
+            for(;;) {
                 for (u32 FuncIdx = 0; FuncIdx < ArrayCount(TestFunctions); ++FuncIdx) {
-                    repetition_tester *pTester = Testers + FuncIdx;
-                    test_function TestFunc = TestFunctions[FuncIdx];
-
-                    printf("\n--- %s ---\n", TestFunc.Name);
-                    NewTestWave(pTester, Params.Dest.Count, CpuTimerFreq);
-                    TestFunc.Func(pTester, &Params);
+                    for (u32 AllocType = 0; AllocType < AllocType_Count; ++AllocType) {
+                        Params.AllocType = (allocation_type)AllocType;
+                        
+                        repetition_tester *pTester = &Testers[FuncIdx][AllocType];
+                        test_function TestFunc = TestFunctions[FuncIdx];
+                        
+                        printf("\n--- %s%s%s ---\n",
+                               DescribeAllocationType(Params.AllocType),
+                               Params.AllocType ? " + " : "",
+                               TestFunc.Name);
+                        NewTestWave(pTester, Params.Dest.Count, CpuTimerFreq);
+                        TestFunc.Func(pTester, &Params);
+                    }
                 }
             }
         }
@@ -62,5 +60,5 @@ main(int ArgC, char **ArgV)
         printf("Usage: %s [existing filename]", ArgV[0]);
     }
 
-    return(0);
+    return 0;
 }
